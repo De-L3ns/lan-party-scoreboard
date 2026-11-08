@@ -1,0 +1,12 @@
+:root {
+  color-scheme: dark;
+  --color-background: #151a16;
+  --color-surface: #1c241b;
+  --color-border: #45523b;
+  --color-text: #e9e9d9;
+  --color-muted: #acb59b;
+  --color-accent: #d6ef72;
+  --font-body: Arial, sans-serif;
+  --font-mono: 'Courier New', monospace;
+  --content-width: 1200px;
+}

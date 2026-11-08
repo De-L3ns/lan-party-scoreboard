@@ -1,0 +1,15 @@
+# Local prototype; production implementation lives separately.
+/mockup/
+
+# Dependencies, output, and local configuration.
+/node_modules/
+/dist/
+/coverage/
+.env
+.env.*
+!.env.example
+*.local
+*.log
+.DS_Store
+/supabase/.temp/
+/supabase/.branches/
