@@ -2,6 +2,8 @@
 
 Status: MVP application source and SQL migration implemented; hosted migration and manual acceptance checks pending. Updated: 2026-11-08.
 
+[002 — Guided game flow](002-guided-game-flow.md) supersedes the game-starting and navigation flow below. It also includes free-for-all games and required team naming before a team game starts. Other MVP requirements continue to apply.
+
 This document consolidates the product direction discussed so far. “First implementation” means the first usable version with Supabase persistence, rather than the existing in-memory mockup. [Setup](../Setup.md) explains the technical direction. Requirements already expressed by the user are separated from proposed defaults and questions still to resolve.
 
 Mockup iteration is paused. The retained prototype is a visual reference; this specification takes precedence where the prototype differs, particularly for top-three emphasis, admin-only drafting, game selection, and team assignment order.

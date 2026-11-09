@@ -1,6 +1,5 @@
 import { escapeHtml as h, formatPoints, imageMarkup, installImageFallbacks } from '../../lib/html.js';
 import { previewAwards, toCents } from '../../domain/scoring.js';
-import { validateDraft, validateParticipants } from '../../domain/draft.js';
 
 const field = (label, name, value = '', extra = '') => `<label>${h(label)}<input name="${name}" value="${h(value)}" ${extra}></label>`;
 
@@ -61,43 +60,7 @@ export function createAdminForms({ dialog, api, client, config, getBoard, refres
       installImageFallbacks(form);
     },
 
-    game() {
-      const sessionId = getBoard().session.id;
-      dialog.open({ title: 'New game', content: `${field('Game name', 'name', '', 'required maxlength="100"')}<label>Game format<select name="format"><option value="teams">Team-based</option><option value="ffa">Free-for-all</option></select></label>${field('Mode, map or details', 'details', '', 'maxlength="300"')}<label>Result ranking<select name="direction"><option value="higher">Higher score wins</option><option value="lower">Lowest score/time wins</option></select></label><p class="form-help">Team-based games use a random team draft. Free-for-all games score each participant individually. For times, enter numeric seconds (up to two decimal places).</p>`,
-        async onSubmit(form) {
-          const values = Object.fromEntries(new FormData(form));
-          const game = await api.mutate('create_game', { ...values, session_id: sessionId });
-          selectGame(game.id); await refresh(); notify(values.format === 'ffa' ? 'Game created. Select the participating players.' : 'Game created. Select players to draft teams.');
-        },
-      });
-    },
-
-    draft(game) {
-      const players = getBoard().roster.filter((player) => !player.archived);
-      if (game.format === 'ffa') {
-        dialog.open({ title: `Participants: ${game.name}`, submit: 'Save participants', content: `<p class="form-help">Every player competes individually. Select 2–64 participants.</p><fieldset class="participant-list"><legend>Participating players</legend>${players.map((player) => `<label class="check-row"><input type="checkbox" name="player" value="${player.id}" ${!game.total_players || game.participants.some((row) => row.player_id === player.id) ? 'checked' : ''}>${h(player.name)}</label>`).join('')}</fieldset>`,
-          async onSubmit(form) {
-            const ids = new FormData(form).getAll('player');
-            validateParticipants(ids);
-            await api.mutate('prepare_draw', { game_id: game.id, revision: game.draft_revision, player_ids: ids, confirm_redraw: Boolean(game.total_players) });
-            await refresh(); notify('Participants saved. Ready to play or enter individual results.');
-          },
-        });
-        return;
-      }
-      dialog.open({ title: game.total_players ? `Redraw: ${game.name}` : `Draft: ${game.name}`, submit: 'Prepare draft', content: `<p class="form-help">One player per spin. Team A → Team B → next team → Team A.</p><fieldset class="participant-list"><legend>Participating players</legend>${players.map((player) => `<label class="check-row"><input type="checkbox" name="player" value="${player.id}" ${!game.total_players || game.participants.some((row) => row.player_id === player.id) ? 'checked' : ''}>${h(player.name)}</label>`).join('')}</fieldset><label>Number of teams<select name="team_count">${Array.from({ length: Math.min(8, players.length) - 1 }, (_, index) => `<option value="${index + 2}" ${game.team_count === index + 2 ? 'selected' : ''}>${index + 2}</option>`).join('')}</select></label>${game.total_players ? '<label class="check-row"><input type="checkbox" name="confirm" required>Replace this game’s existing draft and revealed assignments</label>' : ''}`,
-        async onSubmit(form) {
-          const data = new FormData(form);
-          const ids = data.getAll('player');
-          const teamCount = Number(data.get('team_count'));
-          validateDraft(ids, teamCount);
-          await api.mutate('prepare_draw', { game_id: game.id, revision: game.draft_revision, player_ids: ids, team_count: teamCount, confirm_redraw: Boolean(data.get('confirm')) });
-          await refresh(); notify('Draft prepared. Spin to pick the first player.');
-        },
-      });
-    },
-
-    result(game) {
+    result(game, presenter = dialog) {
       const board = getBoard();
       const freeForAll = game.format === 'ffa';
       const read = (form) => game.teams.map((team) => {
@@ -120,12 +83,12 @@ export function createAdminForms({ dialog, api, client, config, getBoard, refres
             group.querySelector('[data-custom]').hidden = team.mode !== 'custom';
           });
           const rows = previewAwards(teams, board.players, game.awards);
-          form.querySelector('.result-preview').innerHTML = `<table><caption>Player points preview</caption><thead><tr><th>Player</th><th>Before</th><th>After</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${h(board.players.find((player) => player.id === row.player_id).name)}</td><td>${formatPoints(row.before)}</td><td>${formatPoints(row.after)}</td></tr>`).join('')}</tbody></table>`;
+          form.querySelector('.result-preview').innerHTML = `<table><caption>Player points preview</caption><thead><tr><th>Player</th><th>Current</th><th>Award</th><th>New total</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${h(board.players.find((player) => player.id === row.player_id).name)}</td><td>${formatPoints(row.before)}</td><td>${formatPoints(row.award)}</td><td>${formatPoints(row.after)}</td></tr>`).join('')}</tbody></table>`;
         } catch (error) { form.querySelector('.result-preview').textContent = error.message; }
       };
-      const form = dialog.open({ title: `${game.score_revision ? 'Correct' : 'Record'} result: ${game.name}`, submit: 'Preview awards', content: `${game.teams.map((team) => `<fieldset class="result-team" data-team="${team.id}"><legend>${h(team.name)}</legend><div class="form-grid">${field(game.direction === 'lower' ? 'Result (lower wins)' : 'Result (higher wins)', `${team.id}-result`, team.result ?? '', 'inputmode="decimal" required')}
+      const form = presenter.open({ title: `${game.score_revision ? 'Correct' : 'Record'} result: ${game.name}`, submit: 'Preview awards', content: `${game.teams.map((team) => `<fieldset class="result-team" data-team="${team.id}"><legend>${h(team.name)}</legend><div class="form-grid">${field(game.direction === 'lower' ? 'Result (lower wins)' : 'Result (higher wins)', `${team.id}-result`, team.result ?? '', 'inputmode="decimal" required')}
         ${freeForAll ? '' : `<label>Award rule<select name="${team.id}-mode"><option value="equal" ${team.award?.mode === 'equal' ? 'selected' : ''}>Points per player</option><option value="split" ${team.award?.mode === 'split' ? 'selected' : ''}>Split total pool</option><option value="custom" ${team.award?.mode === 'custom' ? 'selected' : ''}>Custom per player</option></select></label>`}
-        <div data-amount>${field(freeForAll ? 'Player points' : 'Award / pool', `${team.id}-amount`, team.award?.amount ?? '0', 'inputmode="decimal"')}</div></div><div data-custom class="form-grid">${freeForAll ? '' : team.members.map((member) => field(board.players.find((player) => player.id === member.player_id).name, `${team.id}-${member.player_id}`, team.award?.custom?.[member.player_id] ?? '0', 'inputmode="decimal"')).join('')}</div></fieldset>`).join('')}${field(game.score_revision ? 'Reason for correction' : 'Note (optional)', 'reason', '', `${game.score_revision ? 'required' : ''} maxlength="500"`)}<div class="result-preview"></div><p class="form-help">Saving replaces this game’s earlier player awards. Other games and adjustments stay intact.</p>`,
+        <div data-amount>${field(freeForAll ? 'Player points' : 'Award / pool', `${team.id}-amount`, team.award?.amount ?? '0', 'inputmode="decimal"')}</div></div><div data-custom class="form-grid">${freeForAll ? '' : team.members.map((member) => field(board.players.find((player) => player.id === member.player_id).name, `${team.id}-${member.player_id}`, team.award?.custom?.[member.player_id] ?? '0', 'inputmode="decimal"')).join('')}</div></fieldset>`).join('')}${field(game.score_revision ? 'Reason for correction' : 'Note (optional)', 'reason', '', `${game.score_revision ? 'required' : ''} maxlength="500"`)}<div class="result-preview"></div>`,
         onInput(form) {
           form.dataset.confirmed = '';
           form.querySelector('[type=submit]').textContent = 'Preview awards';
@@ -136,11 +99,11 @@ export function createAdminForms({ dialog, api, client, config, getBoard, refres
           previewAwards(teams, board.players, game.awards);
           if (!form.dataset.confirmed) {
             preview(form); form.dataset.confirmed = 'yes';
-            form.querySelector('[type=submit]').textContent = 'Confirm and apply result';
+            form.querySelector('[type=submit]').textContent = 'Save results';
             return false;
           }
           await api.mutate('save_result', { game_id: game.id, revision: game.score_revision, board_revision: board.revision, teams: teams.map(({ player_ids, ...team }) => team), reason: form.elements.reason.value.trim() });
-          await refresh(); notify('Result saved. Standings updated.');
+          selectGame(null); await refresh(); notify('Result saved.');
         },
       });
       // Show the correct mode controls before result fields have been completed.

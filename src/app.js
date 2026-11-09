@@ -1,282 +1,251 @@
 import { renderLeaderboard } from './features/leaderboard/view.js';
 import { renderGames, renderTeams, statusLabel, formatLabel } from './features/games/view.js';
+import { GameSetup, TeamNames } from './features/games/setup.js';
 import { DraftController } from './features/teams/controller.js';
 import { createAdminForms } from './features/admin/forms.js';
+import { activeGame, gameScreen } from './domain/game-flow.js';
 import { createApi } from './lib/api.js';
 import { createDialog } from './lib/dialog.js';
+import { createPageForm } from './lib/page-form.js';
 import { escapeHtml as h } from './lib/html.js';
 
+const readRoute = () => {
+  const hash = location.hash.slice(1);
+  const params = new URLSearchParams(hash);
+  return { id: params.get('game'), step: params.get('step') || '', newGame: hash === 'new-game' };
+};
+
 export function mountApp(root, { config, supabase }) {
-  root.innerHTML = `
-    <a class="skip-link" href="#main">Skip to standings</a>
-    <div class="app-shell">
-      <header class="app-header">
-        <a class="wordmark" href="#main">LAN<span>//</span>LOCAL</a>
-        <span class="session-name"></span>
-        <button class="button" data-action="login">Admin</button>
-        <button class="button" data-action="logout" hidden>Sign out</button>
-      </header>
-      <main id="main">
-        <div class="page-heading"><h1>Leaderboard<span>.</span></h1><span class="board-summary muted"></span></div>
-        <div class="connection-notice" role="status"><span class="connection-text"></span><button class="button" data-action="refresh">Refresh</button></div>
-        <p class="app-message" role="alert" hidden></p>
-        <div class="archive-controls" hidden><label>LAN session<select id="session-select" aria-label="LAN session"></select></label><button class="button" data-action="export">Export report</button></div>
-        <div class="admin-actions" hidden>
-          <button class="button primary" data-action="players">Players</button>
-          <button class="button" data-action="create-game">New game</button>
-          <button class="button" data-action="adjust">Adjust points</button>
-          <button class="button" data-action="history">Score history</button>
-          <button class="button danger" data-action="reset">New LAN</button>
-        </div>
-        <div class="dashboard">
-          <section aria-labelledby="leaderboard-heading"><h2 id="leaderboard-heading" class="sr-only">Individual standings</h2><div id="leaderboard"><p class="empty-state">Loading standings…</p></div></section>
-          <aside aria-labelledby="games-heading"><h2 id="games-heading">Games</h2><div id="game-list"></div></aside>
-        </div>
-        <section class="game-section" aria-labelledby="selected-game-title">
-          <div class="section-heading"><div><h2 id="selected-game-title">Select a game</h2><p class="game-description muted">Choose a game to view its players, teams or results.</p></div><span class="game-status status-label"></span></div>
-          <div id="game-actions"></div>
-          <div id="game-draft"></div>
-          <div id="team-rosters" class="team-grid"></div>
-        </section>
-      </main>
-      <footer><span>LAN // LOCAL</span><span>Individual points. Free-for-all or teams.</span></footer>
-    </div>`;
+  root.innerHTML = `<a class="skip-link" href="#main">Skip to main content</a><div class="app-shell">
+    <header class="app-header"><a class="wordmark" href="#main" data-action="scoreboard" aria-label="Lander &amp; Fabn's LAN Party"><span class="wordmark-host">Lander &amp; Fabn's</span><span class="wordmark-title">LAN <span>Party</span></span></a><span class="session-name"></span>
+      <button class="button" data-action="login">Admin</button>
+      <details class="admin-menu" hidden><summary class="button">Admin</summary><div class="admin-menu-content"><div class="admin-actions">
+        <button class="button" data-action="players">Players</button><button class="button" data-action="adjust">Adjust points</button><button class="button" data-action="history">Score history</button><button class="button danger" data-action="reset">New LAN</button>
+      </div><div class="archive-controls"><label>LAN session<select id="session-select"></select></label><button class="button" data-action="export">Export report</button></div><button class="button" data-action="logout">Sign out</button></div></details>
+    </header>
+    <main id="main" tabindex="-1"><div class="connection-notice" role="status" hidden><span class="connection-text"></span><button class="button" data-action="refresh">Refresh</button></div><p class="app-message" role="alert" hidden></p>
+      <div id="home-view"><div class="page-heading"><h1>Leaderboard</h1><button class="button primary start-new-game" data-action="start-new-game" hidden>Start new game <span aria-hidden="true">＋</span></button></div>
+        <div class="dashboard"><section aria-label="Individual standings"><div id="leaderboard"><p class="empty-state">Loading standings…</p></div></section><aside id="games-sidebar" aria-label="Games"><div id="game-list"></div></aside></div>
+      </div>
+      <section id="game-view" hidden aria-labelledby="flow-title"><div class="flow-toolbar"><button class="button" data-action="scoreboard">← Scoreboard</button><nav id="setup-progress" aria-label="Game setup" hidden></nav></div>
+        <div class="flow-heading"><div><h1 id="flow-title"></h1><p class="game-description muted"></p></div><span class="game-status status-label"></span></div><div id="flow-content"></div>
+      </section>
+    </main></div>`;
   const $ = (selector) => root.querySelector(selector);
   let board = null;
   let selectedSession = null;
-  let selectedGame = new URLSearchParams(location.hash.slice(1)).get('game');
+  let route = readRoute();
+  let workspaceKey;
   let draw;
-  let drawGame;
+  let setup;
+  let names;
+  let resultPage;
   let stale = false;
   let commandBusy = false;
   let fetchId = 0;
-  let liveChannel;
   let refreshTimer;
+  let messageTimer;
   let latestFetch = Promise.resolve();
   const dialog = createDialog();
   const api = supabase ? createApi(supabase) : null;
+  const mutable = () => Boolean(board?.is_admin && board.session.active && !stale && navigator.onLine && !commandBusy);
+  const currentGame = () => board?.games.find((game) => game.id === route.id);
+  const workspaceBusy = () => Boolean(draw?.busy || setup?.busy || names?.busy || resultPage?.busy);
 
   function notify(message, error = false) {
+    clearTimeout(messageTimer);
     $('.app-message').textContent = message;
     $('.app-message').hidden = !message;
     $('.app-message').classList.toggle('error', error);
+    if (message && !error) messageTimer = setTimeout(() => { $('.app-message').hidden = true; }, 4000);
   }
-
-  function connection(message) {
-    $('.connection-text').textContent = message;
-    $('.connection-notice').hidden = !message;
+  function connection(message) { $('.connection-text').textContent = message; $('.connection-notice').hidden = !message; }
+  function resetWorkspace() {
+    draw?.dispose(); setup?.dispose(); names?.dispose(); resultPage?.dispose();
+    draw = null; setup = null; names = null; resultPage = null; workspaceKey = null;
   }
-
-  const mutable = () => Boolean(board?.is_admin && board.session.active && (!selectedSession || selectedSession === board.session.id) && !stale && navigator.onLine);
-  const currentGame = () => board?.games.find((game) => game.id === selectedGame);
-  function selectGame(id) {
-    if (id !== selectedGame) { draw?.dispose(); draw = null; drawGame = null; }
-    selectedGame = id;
-    history.replaceState(null, '', id ? `#game=${encodeURIComponent(id)}` : location.pathname + location.search);
+  function writeRoute() {
+    const hash = route.newGame ? '#new-game' : route.id ? `#game=${encodeURIComponent(route.id)}${route.step ? `&step=${route.step}` : ''}` : '';
+    history.replaceState(null, '', `${location.pathname}${location.search}${hash}`);
+  }
+  function selectGame(id, step = '') {
+    if (route.id !== id || route.step !== step || route.newGame) resetWorkspace();
+    route = { id, step, newGame: false }; writeRoute();
   }
   function selectSession(id) { selectedSession = id; }
+  function focusPage() { $('#main').focus({ preventScroll: true }); window.scrollTo({ top: 0, behavior: 'instant' }); }
+  function renderProgress(format, screen) {
+    const steps = format === 'ffa' ? ['players'] : ['players', 'draw', 'names'];
+    const index = steps.indexOf(screen);
+    $('#setup-progress').hidden = index < 0;
+    $('#setup-progress').innerHTML = steps.map((step, i) => `<span class="flow-step ${i === index ? 'current' : i < index ? 'done' : ''}" ${i === index ? 'aria-current="step"' : ''}><span>${i < index ? '✓' : i + 1}</span>${({ players: 'Players', draw: 'Team assignment', names: 'Team names' })[step]}</span>`).join('');
+  }
 
-  function renderGame() {
-    const game = currentGame();
+  function renderWorkspace(game, screen) {
     const canWrite = mutable();
-    if (!game) {
-      draw?.dispose(); draw = null; drawGame = null;
-      $('#selected-game-title').textContent = 'Select a game';
-      $('.game-description').textContent = 'Choose a game to view its players, teams or results.';
-      $('.game-status').textContent = '';
-      $('#team-rosters').innerHTML = '';
-      $('#game-draft').innerHTML = '';
-      $('#game-actions').innerHTML = canWrite ? '<button class="button" disabled>Select a game before setup</button>' : '';
-      return;
-    }
-    $('#selected-game-title').textContent = game.name;
-    const freeForAll = game.format === 'ffa';
-    $('.game-description').textContent = [formatLabel(game), game.details, game.direction === 'lower' ? 'Lower result wins' : 'Higher result wins', !board.session.active ? 'Archived LAN — read only' : ''].filter(Boolean).join(' · ');
-    $('.game-status').textContent = statusLabel(game);
-    $('#game-actions').innerHTML = canWrite ? [
-      ['setup', 'drafting', 'ready'].includes(game.status) ? `<button class="button" data-action="draft" ${board.roster.filter((player) => !player.archived).length < 2 ? 'disabled' : ''}>${freeForAll ? (game.total_players ? 'Edit participants' : 'Select participants') : (game.total_players ? 'Redraw teams' : 'Set up teams')}</button>` : '',
-      game.status === 'ready' ? '<button class="button primary" data-action="start-game">Start game</button>' : '',
-      ['ready', 'playing', 'completed'].includes(game.status) ? `<button class="button" data-action="result">${game.score_revision ? 'Correct result' : 'Enter result'}</button>` : '',
-    ].join('') : '';
-    renderTeams($('#team-rosters'), game, api);
-    if (!freeForAll && game.total_players > 0 && ['drafting', 'ready'].includes(game.status)) {
-      $('#game-draft').hidden = false;
-      if (drawGame !== game.id || !draw) {
-        draw?.dispose();
-        draw = new DraftController($('#game-draft'), { api, refresh, notify });
-        drawGame = game.id;
+    const canSetup = canWrite && !activeGame(board.games);
+    const key = `${board.session.id}:${game?.id || 'new'}:${screen}`;
+    const changed = workspaceKey !== key;
+    if (changed) { resetWorkspace(); workspaceKey = key; $('#flow-content').replaceChildren(); }
+    $('#flow-title').textContent = ({ players: 'Who’s playing?', draw: 'Assign teams', names: 'Name the teams', results: `Results: ${game?.name}` })[screen] || game?.name;
+    $('.game-description').textContent = game ? (['players', 'draw', 'names'].includes(screen) ? (screen === 'players' ? '' : game.name) : [formatLabel(game), game.details, game.direction === 'lower' ? 'Lowest score/time wins' : 'Highest score wins'].filter(Boolean).join(' · ')) : '';
+    $('.game-status').textContent = ['playing', 'report'].includes(screen) ? statusLabel(game) : '';
+    renderProgress(game?.format, screen);
+    const content = $('#flow-content');
+    if (screen === 'players') {
+      if (!setup) setup = new GameSetup(content, { game, board, api, canWrite: canSetup, onFormatChange: (format) => renderProgress(format, screen), onSubmit: async (input) => {
+        if (!mutable() || activeGame(board.games)) throw new Error('Finish the active game before starting another.');
+        const result = await api.mutate('setup_game', input);
+        selectGame(result.status === 'playing' ? null : result.id, result.status === 'playing' ? '' : 'draw');
+        await refresh(); focusPage();
+      } });
+      else setup.update(board, canSetup);
+    } else if (screen === 'draw') {
+      if (changed) {
+        content.innerHTML = '<div class="draft-layout"><div id="game-draft"></div><div id="team-rosters" class="team-grid"></div></div><div class="flow-actions"><button class="button" data-action="edit-setup">Edit players / teams</button><button class="button primary" data-action="name-teams" hidden>Name the teams →</button></div>';
+        draw = new DraftController($('#game-draft'), { api, refresh, notify, onStateChange: () => {
+          for (const action of ['name-teams', 'edit-setup']) {
+            const button = $(`[data-action=${action}]`);
+            if (button) button.disabled = !mutable() || Boolean(activeGame(board.games)) || Boolean(draw?.busy);
+          }
+        } });
       }
-      draw.update(game, canWrite);
+      draw.update(game, canSetup); renderTeams($('#team-rosters'), game, api);
+      $('[data-action=name-teams]').hidden = game.status !== 'ready' || !board.is_admin;
+      $('[data-action=name-teams]').disabled = !canSetup || draw.busy;
+      $('[data-action=edit-setup]').hidden = !board.is_admin;
+      $('[data-action=edit-setup]').disabled = !canSetup || draw.busy;
+    } else if (screen === 'names') {
+      if (!names) names = new TeamNames(content, { game, api, canWrite: canSetup, onSubmit: async (input) => {
+        if (!mutable()) throw new Error('Reconnect and refresh before starting.');
+        await api.mutate('start_game', input); selectGame(null); await refresh(); focusPage();
+      } });
+      else names.update(canSetup);
+      if (changed) content.insertAdjacentHTML('afterbegin', '<button class="text-button back-to-draw" data-action="back-to-draw">← Team assignment</button>');
+    } else if (screen === 'results') {
+      if (!resultPage) { resultPage = createPageForm(content, { canSubmit: mutable }); forms.result(game, resultPage); }
+      else resultPage.update();
     } else {
-      draw?.dispose(); draw = null; drawGame = null;
-      $('#game-draft').innerHTML = game.status === 'setup' ? `<p class="empty-state">${freeForAll ? 'No participants yet. An admin can select players for this free-for-all.' : 'No draft yet. An admin can select players and prepare teams for this game.'}</p>` : '';
+      if (changed) content.innerHTML = '<div id="team-rosters" class="team-grid game-rosters"></div><div id="game-actions" class="flow-actions"></div>';
+      renderTeams($('#team-rosters'), game, api);
+      $('#game-actions').innerHTML = canWrite ? `<button class="button primary" data-action="result">${screen === 'playing' ? 'End game' : 'Correct result'}</button>` : '';
     }
   }
 
   function render() {
     if (!board) return;
     $('.session-name').textContent = board.session.name;
-    $('.board-summary').textContent = `${board.players.length} players · ${board.games.length} games${board.session.active ? '' : ' · Archive'}`;
     $('[data-action=login]').hidden = board.is_admin;
-    $('[data-action=logout]').hidden = !board.is_admin;
-    $('.archive-controls').hidden = !board.is_admin;
-    $('.admin-actions').hidden = !board.is_admin;
-    $('.admin-actions').querySelectorAll('button').forEach((button) => {
-      button.disabled = commandBusy || (button.dataset.action !== 'history' && !mutable());
-    });
-    $('[data-action=adjust]').disabled = commandBusy || !mutable() || !board.players.length;
-    $('#session-select').innerHTML = board.sessions.map((session) => `<option value="${session.id}" ${session.id === board.session.id ? 'selected' : ''}>${h(session.name)}${session.active ? ' (active)' : ' (archived)'}</option>`).join('');
+    $('.admin-menu').hidden = !board.is_admin;
+    $('.admin-actions').querySelectorAll('button').forEach((button) => { button.disabled = button.dataset.action === 'history' ? false : !mutable(); });
+    $('[data-action=adjust]').disabled = !mutable() || !board.players.length;
+    $('#session-select').innerHTML = board.sessions.map((session) => `<option value="${session.id}" ${session.id === board.session.id ? 'selected' : ''}>${h(session.name)}${session.active ? ' (active)' : ''}</option>`).join('');
+    $('[data-action=start-new-game]').hidden = !board.is_admin || !board.session.active;
+    $('[data-action=start-new-game]').disabled = !mutable() || Boolean(activeGame(board.games));
     renderLeaderboard($('#leaderboard'), board.players, api);
-    renderGames($('#game-list'), board.games, selectedGame);
-    renderGame();
+    renderGames($('#game-list'), board.games, api, board.is_admin);
+    $('#games-sidebar').hidden = !$('#game-list').childElementCount;
+    $('.dashboard').classList.toggle('no-games', $('#games-sidebar').hidden);
+    const game = currentGame();
+    const screen = gameScreen(game, route.step, board.is_admin);
+    const showGame = (route.newGame && board.is_admin && board.session.active) || (game && (board.is_admin || game.total_players > 0 || game.status === 'completed'));
+    $('#home-view').hidden = Boolean(showGame); $('#game-view').hidden = !showGame;
+    if (showGame) renderWorkspace(game, screen); else resetWorkspace();
   }
 
   async function loadBoard(id) {
     try {
       const next = await api.board(selectedSession);
       if (id !== fetchId) return;
-      if (!next) throw new Error('No LAN session found. Apply the MVP migration to initialize the board.');
+      if (!next) throw new Error('No LAN session found. Apply the database migrations.');
       if (board?.is_admin && !next.is_admin) clearPrivateView();
       board = next; stale = false;
-      if (selectedGame && !currentGame()) selectGame(null);
-      connection(navigator.onLine ? '' : 'Offline — showing the last loaded standings.');
-      render();
+      if (route.id && !currentGame()) selectGame(null);
+      connection(navigator.onLine ? '' : 'Offline — showing the last loaded standings.'); render();
     } catch (error) {
       if (id !== fetchId) return;
-      if (selectedSession && error.code === '42501') {
-        clearPrivateView();
-        await refresh();
-        return;
-      }
-      stale = true;
-      connection(`${board ? 'Showing the last loaded data. ' : ''}${error.message} If read_board is missing, apply the MVP migration.`);
-      if (!board) $('#leaderboard').innerHTML = '<p class="empty-state">Standings could not be loaded. Check the database setup and try Refresh.</p>';
+      if (selectedSession && error.code === '42501') { clearPrivateView(); await refresh(); return; }
+      stale = true; connection(`${board ? 'Showing the last loaded data. ' : ''}${error.message}`);
+      if (!board) $('#leaderboard').innerHTML = '<p class="empty-state">Standings could not be loaded.</p>';
       render();
     }
   }
-
   function refresh() {
     if (!api) return Promise.resolve();
     const id = ++fetchId;
-    const request = loadBoard(id);
-    latestFetch = request;
-    // A mutation caller must wait for the newest read if Realtime supersedes its read.
-    return request.then(async () => {
-      let observed = id;
-      while (observed !== fetchId) {
-        observed = fetchId;
-        await latestFetch;
-      }
-    });
+    const request = loadBoard(id); latestFetch = request;
+    return request.then(async () => { let observed = id; while (observed !== fetchId) { observed = fetchId; await latestFetch; } });
   }
-
-  async function perform(operation, input) {
-    if (commandBusy || !mutable()) return;
-    commandBusy = true; render();
-    try { await api.mutate(operation, input); await refresh(); notify('Saved.'); }
-    catch (error) { notify(error.message, true); await refresh(); }
-    finally { commandBusy = false; render(); }
-  }
-
   function clearPrivateView() {
-    fetchId += 1; draw?.dispose(); draw = null; drawGame = null;
-    board = null; selectedSession = null; selectGame(null);
-    dialog.clear();
-    $('.admin-actions').hidden = true;
-    $('.archive-controls').hidden = true;
-    $('#session-select').replaceChildren();
-    $('[data-action=logout]').hidden = true;
-    $('[data-action=login]').hidden = false;
-    $('.session-name').textContent = '';
-    $('.board-summary').textContent = '';
-    $('#leaderboard').innerHTML = '<p class="empty-state">Loading public standings…</p>';
-    $('#game-list').innerHTML = '';
-    $('#game-actions').innerHTML = '';
-    $('#game-draft').innerHTML = '';
-    $('#team-rosters').innerHTML = '';
-    $('#selected-game-title').textContent = 'Select a game';
-    $('.game-description').textContent = '';
-    $('.game-status').textContent = '';
-    notify('');
+    fetchId += 1; resetWorkspace(); board = null; selectedSession = null; selectGame(null); dialog.clear();
+    $('.admin-menu').hidden = true; $('.admin-menu').open = false;
+    $('#session-select').replaceChildren(); $('[data-action=login]').hidden = false; $('[data-action=start-new-game]').hidden = true;
+    $('.session-name').textContent = ''; $('#leaderboard').innerHTML = '<p class="empty-state">Loading standings…</p>';
+    $('#game-list').replaceChildren(); $('#flow-content').replaceChildren(); $('#home-view').hidden = false; $('#game-view').hidden = true; notify('');
   }
 
   if (!api || config.issues.length) {
-    connection(config.issues.length ? config.issues.join(' ') : 'Add your Supabase project URL and publishable key, then restart or rebuild the app.');
-    $('#leaderboard').innerHTML = '<p class="empty-state">Supabase configuration is needed to load the leaderboard.</p>';
-    $('[data-action=login]').disabled = true;
-    $('[data-action=refresh]').disabled = true;
+    connection(config.issues.length ? config.issues.join(' ') : 'Add your Supabase project URL and publishable key.');
+    $('#leaderboard').innerHTML = '<p class="empty-state">Supabase configuration is needed.</p>';
+    $('[data-action=login]').disabled = true; $('[data-action=refresh]').disabled = true;
     return () => {};
   }
-
   const forms = createAdminForms({ dialog, api, client: supabase, config, getBoard: () => board, refresh, notify, selectGame, selectSession });
-
-  root.addEventListener('click', async (event) => {
+  const onClick = async (event) => {
     const button = event.target.closest('[data-action]');
     if (!button || button.disabled) return;
     const action = button.dataset.action;
     if (action === 'refresh') { await refresh(); return; }
+    if (workspaceBusy()) { event.preventDefault(); return; }
+    if (action === 'scoreboard') { event.preventDefault(); selectGame(null); render(); focusPage(); return; }
     if (action === 'login') { forms.login(); return; }
     if (action === 'logout') {
-      clearPrivateView();
-      const { error } = await supabase.auth.signOut({ scope: 'local' });
-      if (error) notify(error.message, true);
-      await refresh(); return;
-    }
-    if (action === 'select-game') {
-      selectGame(button.dataset.id); render();
-      $('.game-section').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
+      clearPrivateView(); commandBusy = true;
+      try { const { error } = await supabase.auth.signOut({ scope: 'local' }); if (error) notify(error.message, true); }
+      finally { commandBusy = false; await refresh(); }
       return;
     }
+    if (action === 'select-game') { selectGame(button.dataset.id); notify(''); render(); focusPage(); return; }
     if (!board?.is_admin) return;
+    $('.admin-menu').open = false;
     if (action === 'history') { forms.history(); return; }
     if (action === 'export') {
       const blob = new Blob([JSON.stringify(board, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a'); anchor.href = url; anchor.download = `lan-${board.session.id}.json`; anchor.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000); return;
+      const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `lan-${board.session.id}.json`; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); return;
     }
-    if (!mutable() || commandBusy) return;
+    if (!mutable()) return;
     notify('');
+    if (action === 'start-new-game' && !activeGame(board.games)) { resetWorkspace(); route = { id: null, step: 'players', newGame: true }; writeRoute(); render(); focusPage(); }
     if (action === 'players') forms.roster();
-    if (action === 'create-game') forms.game();
     if (action === 'adjust') forms.adjust();
-    if (action === 'reset') { draw?.stop(); forms.reset(); }
-    if (action === 'draft' && currentGame()) { draw?.stop(); forms.draft(currentGame()); }
-    if (action === 'result' && currentGame()) forms.result(currentGame());
-    if (action === 'start-game' && currentGame()) await perform('start_game', { game_id: currentGame().id, revision: currentGame().draft_revision });
-  });
+    if (action === 'reset') forms.reset();
+    if (action === 'name-teams' && currentGame()?.status === 'ready') { selectGame(route.id, 'names'); render(); focusPage(); }
+    if (action === 'edit-setup' && ['setup', 'drafting', 'ready'].includes(currentGame()?.status)) { selectGame(route.id, 'players'); render(); focusPage(); }
+    if (action === 'back-to-draw') { selectGame(route.id, 'draw'); render(); focusPage(); }
+    if (action === 'result' && ['playing', 'completed'].includes(currentGame()?.status)) { selectGame(route.id, 'results'); render(); focusPage(); }
+  };
+  root.addEventListener('click', onClick);
   $('#session-select').addEventListener('change', async (event) => {
-    draw?.dispose(); draw = null; drawGame = null;
-    selectSession(event.target.value); selectGame(null);
-    stale = true; render(); connection('Loading selected LAN…');
-    await refresh();
+    if (workspaceBusy()) { event.target.value = board.session.id; return; }
+    resetWorkspace(); selectSession(event.target.value); selectGame(null); stale = true; render(); connection('Loading LAN…'); await refresh();
   });
-
-  const onOffline = () => { stale = true; draw?.stop(); connection('Offline — showing the last loaded data. Reconnect before editing.'); render(); };
+  const onOffline = () => { stale = true; draw?.stop(); connection('Offline — reconnect before editing.'); render(); };
   const onOnline = () => void refresh();
   const onVisibility = () => { if (document.hidden) draw?.stop(); else void refresh(); };
-  window.addEventListener('offline', onOffline);
-  window.addEventListener('online', onOnline);
-  document.addEventListener('visibilitychange', onVisibility);
+  const onHashChange = () => { if (workspaceBusy()) { writeRoute(); return; } resetWorkspace(); route = readRoute(); render(); };
+  window.addEventListener('offline', onOffline); window.addEventListener('online', onOnline); window.addEventListener('hashchange', onHashChange); document.addEventListener('visibilitychange', onVisibility);
   const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
     if (event === 'SIGNED_OUT') clearPrivateView();
-    // Keep SDK callbacks synchronous to avoid deadlocks with Auth's session lock.
     clearTimeout(refreshTimer); refreshTimer = setTimeout(() => void refresh(), 0);
   });
-  liveChannel = supabase.channel('scoreboard-updates')
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'board_updates' }, () => {
-      clearTimeout(refreshTimer); refreshTimer = setTimeout(() => void refresh(), 100);
-    })
-    .subscribe((status) => { if (status === 'SUBSCRIBED') void refresh(); });
-  // A bounded fallback also reconciles reset/archive changes after a missed event.
+  const liveChannel = supabase.channel('scoreboard-updates').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'board_updates' }, () => {
+    clearTimeout(refreshTimer); refreshTimer = setTimeout(() => void refresh(), 100);
+  }).subscribe((status) => { if (status === 'SUBSCRIBED') void refresh(); });
   const poll = setInterval(() => { if (!document.hidden) void refresh(); }, 15000);
   void refresh();
-
   return () => {
-    fetchId += 1; draw?.dispose(); clearInterval(poll); clearTimeout(refreshTimer);
-    authListener.subscription.unsubscribe(); void supabase.removeChannel(liveChannel);
-    window.removeEventListener('offline', onOffline);
-    window.removeEventListener('online', onOnline);
-    document.removeEventListener('visibilitychange', onVisibility);
+    fetchId += 1; resetWorkspace(); clearInterval(poll); clearTimeout(refreshTimer); clearTimeout(messageTimer); dialog.clear();
+    authListener.subscription.unsubscribe(); void supabase.removeChannel(liveChannel); root.removeEventListener('click', onClick);
+    window.removeEventListener('offline', onOffline); window.removeEventListener('online', onOnline); window.removeEventListener('hashchange', onHashChange); document.removeEventListener('visibilitychange', onVisibility);
   };
 }
