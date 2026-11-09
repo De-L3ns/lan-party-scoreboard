@@ -6,7 +6,14 @@
   --color-text: #e9e9d9;
   --color-muted: #acb59b;
   --color-accent: #d6ef72;
+  --color-gold: #f2cc60;
+  --color-silver: #c9d4e1;
+  --color-bronze: #df9c68;
   --font-body: Arial, sans-serif;
   --font-mono: 'Courier New', monospace;
-  --content-width: 1200px;
+  --content-width: 1400px;
+  --team-0: #d6ef72;
+  --team-1: #ecba78;
+  --team-2: #89b8d2;
+  --team-3: #c5a4d8;
 }

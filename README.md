@@ -1,73 +1,37 @@
 # LAN // LOCAL
 
-A lightweight LAN-party scoreboard with individual points, randomly balanced teams per game, and admin-managed results. The application foundation uses HTML/CSS/JavaScript, Vite, and a Supabase client, targeting GitHub Pages.
+A LAN-party scoreboard for tracking individual points across free-for-all and team games.
 
-## Application setup
+## Follow the action
 
-Use Node 24 (see `.nvmrc`). If you use nvm:
+Open the scoreboard to see the live standings. The top three appear on a podium; everyone else stays in the player list. Select a game to view its participants, teams, draft progress, or results. No sign-in is needed to watch.
 
-```sh
-nvm install
-nvm use
-npm ci
-```
+## Organize a LAN
 
-Copy `.env.example` to `.env.local` and fill in your Supabase project URL and **publishable** key. `VITE_ADMIN_EMAIL` is the public login identifier for the future admin interface; do not put the admin password in an environment variable. All `VITE_` values are public in the browser build.
+Select **Admin** and sign in with your organizer account.
 
-```sh
-npm run dev
-```
+1. **Add players** — Open **Players** to add names, profile titles, and PNG avatars. Archive players who should no longer join new games.
+2. **Create a game** — Select **New game**, choose free-for-all or team-based, and set whether the highest or lowest score/time wins.
+3. **Choose participants** — For free-for-all, select the players directly. For team games, select players and the number of teams, then spin the wheel or use autoplay to fill the teams.
+4. **Play** — Select **Start game** when everyone is ready. Participants and teams are locked once play starts.
+5. **Record results** — Select **Enter result**, enter the scores and points to award, review the preview, then confirm. The leaderboard updates automatically.
 
-Open the local URL printed by Vite. The app can start without Supabase settings and displays a setup notice. Configured settings initialize the client, but this scaffold does not yet query a database, authenticate admins, or implement scores.
+Games support 2–64 players. Team games support 2–8 teams.
 
-```sh
-npm test
-npm run build
-npm run preview
-```
+## Award and correct points
 
-The build writes `dist/`, with relative asset paths for the GitHub Pages repository URL. CI runs production configuration tests and builds the app; the ignored mockup has no tests.
+Game results and leaderboard points are entered separately. For timed games, enter results in seconds. Scores and points support up to two decimal places.
 
-## Folder structure
+For team games, award the same points to each player, split a total pool, or assign custom points per player. Free-for-all games have a separate result and points award for each participant.
 
-```text
-.github/workflows/  CI and manually triggered GitHub Pages deployment
-docs/              Setup notes and numbered feature specifications
-public/            Static application assets copied into the build
-src/
-  main.js          Browser entry point
-  app.js           Application shell
-  config/          Public environment configuration
-  domain/          Pure production scoring and team rules, when implemented
-  features/        Feature modules, starting with the leaderboard empty view
-  lib/             Shared Supabase client
-  styles/          Design tokens and shared styles
-supabase/
-  migrations/      Versioned SQL, RLS policies, and RPCs, when implemented
-  tests/           Database permission and transaction checks, when implemented
-tests/unit/        Production logic tests
-mockup/            Local prototype, gitignored
-```
+Use **Correct result** to fix an earlier award; the correction replaces that game's previous points. Use **Adjust points** for an individual bonus or penalty. **Score history** shows past changes and lets you reverse an adjustment.
 
-## GitHub Pages
+## Start the next LAN
 
-Once the repository is pushed, select **GitHub Actions** as the Pages source in repository settings. Add `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and optionally `VITE_ADMIN_EMAIL` as repository Actions variables. Run **Deploy to GitHub Pages** manually when ready to publish. No deployment is performed by local setup or by the CI workflow.
+Select **New LAN** to archive the current event and start with zero points while keeping active players and their artwork. Organizers can revisit previous events using the session selector and download a report with **Export report**.
 
-## Documentation
+## Setup and development
 
-- [Setup](docs/Setup.md): stack choices and rationale, hosting, security, and Supabase free-tier preparation.
-- [001 — MVP leaderboard](docs/specs/001-mvp-leaderboard.md): first implementation specification, acceptance scenarios, and open decisions.
-
-## Local mockup
-
-The prototype lives in `mockup/`. This folder is gitignored and will not be present in a fresh clone. Continue prototype experiments there, independently of the production foundation in `src/`.
-
-To preview the local mockup, run from the repository root:
-
-```sh
-python3 -m http.server 8000 --bind 127.0.0.1 --directory mockup
-```
-
-Open http://localhost:8000. Demo admin passcode: `lanparty`. Sample scores and practice draws last until refresh.
-
-The mockup has no automated tests. Additional prototype instructions are in `mockup/README.md` locally.
+- [Setup guide](docs/Setup.md) — local configuration, hosting, and development details.
+- [Database setup](supabase/README.md) — Supabase migrations and organizer access.
+- [Feature specification](docs/specs/001-mvp-leaderboard.md) — detailed requirements and acceptance checks.

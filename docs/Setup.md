@@ -1,6 +1,6 @@
 # Setup
 
-Status: application foundation scaffolded; feature implementation and database setup pending. Updated: 2026-11-08.
+Status: MVP source and migration implemented; hosted migration application and manual acceptance checks pending. Updated: 2026-11-08.
 
 This document explains the technology choices for the first usable release. Product behavior is defined in [001 — MVP leaderboard](specs/001-mvp-leaderboard.md). Proposed choices below describe the target; they do not imply that the repository already implements them.
 
@@ -24,9 +24,9 @@ The application should be small, easy to maintain, inexpensive to operate, and p
 | Live updates | Updates in the current tab only | Supabase Realtime plus authoritative refetches | A shared display should reflect an admin's changes from another device. |
 | Verification | Production environment tests; no automated tests for the mockup | Add domain logic tests and database permission/transaction checks as implemented | Production scoring, randomization, and authorization deserve checks beyond visual review. |
 
-The production foundation now includes `package.json`, a lockfile, Vite configuration, a Supabase client factory, a minimal application shell, CI, and a manually triggered Pages workflow. Node 24 is specified in `.nvmrc` and the package engine range. Vite and `@supabase/supabase-js` are pinned; the lockfile pins their dependency tree. No schema or feature queries exist yet. The local prototype remains in the gitignored `mockup/` folder and does not need automated tests. Application and mockup instructions are in the root README.
+The production application includes Vite/npm tooling, public configuration, Supabase reads and authorized RPC calls, a compact leaderboard with highlighted leaders, admin workflows, game-specific draft presentation, and archive reporting. Node 24 is specified in `.nvmrc`. Vite and `@supabase/supabase-js` are pinned through the lockfile. CI runs lightweight unit checks and builds the app; deployment remains manually triggered. The local prototype remains gitignored and independent of production code.
 
-Use `.env.local` for local public settings, starting from `.env.example`. Only valid paired project URL/publishable-key settings initialize the Supabase client; missing settings show a setup notice. Client initialization is not a connectivity check. The future admin session uses tab-scoped storage. The scaffold performs no remote mutations.
+Use `.env.local` for local public settings, starting from `.env.example`. Only valid paired project URL/publishable-key settings initialize the client. The app then calls `read_board` and subscribes to `board_updates`. Admin sessions use tab-scoped storage, falling back to memory if browser storage is unavailable. Future pick sequences and request deduplication records are kept in an unexposed `scoreboard_private` schema. Apply the migration and enroll the organizer account as described in [database setup](../supabase/README.md).
 
 ## Runtime and data flow
 
@@ -72,4 +72,4 @@ As checked on 2026-11-08, the Free plan lists 500 MB database size, 1 GB file st
 - Use local CSS effects and original assets for the retro game style. The mockup currently loads Google Fonts; a local font bundle or system fallbacks are reasonable production defaults.
 - Test permission boundaries and transactional writes before publishing. Use a separate dataset for development rather than experimenting against a live LAN.
 
-No Supabase resources or production deployment have been created as part of writing this document.
+The user has completed external Supabase project and Pages setup. The MVP migration has not been applied remotely by this implementation. No embedded database dependency or local database test harness was added, per the user's direction; run the manual acceptance checklist before using live scores.
