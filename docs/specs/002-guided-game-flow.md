@@ -6,6 +6,8 @@ The approved HTML showcase is the visual reference for this feature, with the co
 
 This specification replaces the game-starting and game-navigation flow in [001 — MVP leaderboard](001-mvp-leaderboard.md). Existing scoring, authorization, archive, and draft rules continue to apply unless explicitly changed here.
 
+[003 — Themed player picker](003-themed-player-picker.md) specifies the approved replacement for the **Assign teams** wheel presentation, controls, effects, and sound. The guided flow and naming/completion behavior defined here remain in place.
+
 ## 1. Purpose
 
 Make starting and finishing a game easy for an admin operating the scoreboard on a projector while everyone watches. Each screen should make the players, current action, and next step clear without explanatory paragraphs.

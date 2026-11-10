@@ -5,3 +5,5 @@
 The ignored mockup is a reference, not a dependency of the production application.
 
 `game-flow.js` resolves lifecycle screens, detects setup changes that require a confirmed redraw, and validates team names. Starting and naming games is also validated transactionally in the database.
+
+`picker.js` calculates stable avatar slots, rotation endpoints, artwork clearance, and car travel for 2–64 participants. These are presentation calculations: they never choose the next player or destination team.

@@ -3,6 +3,7 @@ import { readPublicConfig } from './config/env.js';
 import { getSupabaseClient } from './lib/supabase.js';
 import './styles/tokens.css';
 import './styles/base.css';
+import './styles/picker.css';
 
 const config = readPublicConfig(import.meta.env);
 // Creating the client does not verify connectivity or load application data.

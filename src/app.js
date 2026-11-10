@@ -50,7 +50,7 @@ export function mountApp(root, { config, supabase }) {
   const api = supabase ? createApi(supabase) : null;
   const mutable = () => Boolean(board?.is_admin && board.session.active && !stale && navigator.onLine && !commandBusy);
   const currentGame = () => board?.games.find((game) => game.id === route.id);
-  const workspaceBusy = () => Boolean(draw?.busy || setup?.busy || names?.busy || resultPage?.busy);
+  const workspaceBusy = () => Boolean(draw?.navigationLocked || setup?.busy || names?.busy || resultPage?.busy);
 
   function notify(message, error = false) {
     clearTimeout(messageTimer);
@@ -106,15 +106,15 @@ export function mountApp(root, { config, supabase }) {
         draw = new DraftController($('#game-draft'), { api, refresh, notify, onStateChange: () => {
           for (const action of ['name-teams', 'edit-setup']) {
             const button = $(`[data-action=${action}]`);
-            if (button) button.disabled = !mutable() || Boolean(activeGame(board.games)) || Boolean(draw?.busy);
+            if (button) button.disabled = !mutable() || Boolean(activeGame(board.games)) || Boolean(draw?.navigationLocked);
           }
         } });
       }
       draw.update(game, canSetup); renderTeams($('#team-rosters'), game, api);
       $('[data-action=name-teams]').hidden = game.status !== 'ready' || !board.is_admin;
-      $('[data-action=name-teams]').disabled = !canSetup || draw.busy;
+      $('[data-action=name-teams]').disabled = !canSetup || draw.navigationLocked;
       $('[data-action=edit-setup]').hidden = !board.is_admin;
-      $('[data-action=edit-setup]').disabled = !canSetup || draw.busy;
+      $('[data-action=edit-setup]').disabled = !canSetup || draw.navigationLocked;
     } else if (screen === 'names') {
       if (!names) names = new TeamNames(content, { game, api, canWrite: canSetup, onSubmit: async (input) => {
         if (!mutable()) throw new Error('Reconnect and refresh before starting.');

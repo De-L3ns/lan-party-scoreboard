@@ -86,20 +86,8 @@ h3 { margin: 0; }
 #game-draft { border: 1px solid var(--color-border); background: var(--color-surface); padding: 20px; margin-bottom: 18px; }
 .draft-caption { display: flex; justify-content: space-between; gap: 15px; color: var(--color-muted); font-size: 12px; }
 .draft-target { color: var(--color-accent); }
-.wheel-stage { display: grid; justify-content: center; margin: 14px 0; }
-.wheel-stage:empty { display: none; }
-.wheel-wrap { width: min(290px, 70vw); height: min(290px, 70vw); position: relative; }
-.draw-wheel { width: 100%; height: 100%; transform-origin: center; display: block; }
-.draw-wheel text { fill: #e9eddd; font: 600 11px var(--font-body); }
-.wheel-pointer { position: absolute; left: 50%; top: 0; transform: translateX(-50%); border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 23px solid var(--color-accent); z-index: 1; }
-.wheel-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--color-accent); font-size: 24px; pointer-events: none; }
 .draft-buttons { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
 .pick-result { text-align: center; font-size: 13px; color: var(--color-muted); }
-.selected-player { display: flex; gap: 15px; text-align: left; align-items: center; max-width: 470px; margin: auto; padding: 14px; border: 1px solid #7a9159; background: #d6ef7207; }
-.selected-player > div { min-width: 0; }
-.selected-player strong { display: block; font-size: 20px; color: var(--color-text); overflow-wrap: anywhere; }
-.selected-player small { display: block; font-size: 11px; color: #d5ba8e; }
-.selected-player > span:last-child { margin-left: auto; color: var(--color-accent); white-space: nowrap; font-weight: 600; }
 .team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
 .individual-results { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
 .individual-result { display: flex; align-items: center; gap: 14px; padding: 16px; border: 1px solid var(--color-border); background: var(--color-surface); min-width: 0; }
@@ -207,7 +195,6 @@ body:has(dialog[open]) { overflow: hidden; }
 .draft-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
 .draft-layout #game-draft { margin: 0; padding: 25px; }
 .draft-caption { font-size: 15px; }
-.draft-layout .wheel-wrap { width: min(345px, 65vw); height: min(345px, 65vw); }
 .draft-layout .team-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
 .draft-layout .team-card h3 { font-size: 23px; }
 .draft-layout .team-card li strong { font-size: 19px; }
@@ -303,9 +290,6 @@ body:has(dialog[open]) { overflow: hidden; }
   .admin-actions .button { padding: 9px 12px; font-size: 12px; }
   .connection-notice { flex-wrap: wrap; }
   .team-grid { grid-template-columns: 1fr; }
-  .selected-player { gap: 10px; padding: 11px; }
-  .selected-player strong { font-size: 17px; }
-  .selected-player > span:last-child { font-size: 12px; }
   .form-grid { grid-template-columns: 1fr; }
   .modal { padding: 19px; }
   .modal h2 { font-size: 22px; }

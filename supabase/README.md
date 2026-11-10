@@ -1,11 +1,11 @@
 # Supabase MVP setup
 
-Apply migrations in order: `migrations/202611080001_mvp.sql`, `migrations/202611090001_game_formats.sql`, then `migrations/202611090002_guided_game_flow.sql`. The first creates the application tables, public read policies, admin-checked transactional functions, a private draft/request schema, the `player-images` bucket configuration, and an initial active LAN. The second adds free-for-all games; existing games remain team-based. The third adds the guided setup/start flow and required team names.
+Apply migrations in order: `migrations/202611080001_mvp.sql`, `migrations/202611090001_game_formats.sql`, `migrations/202611090002_guided_game_flow.sql`, then `migrations/202611100001_themed_picker.sql`. The first creates the application tables, public read policies, admin-checked transactional functions, a private draft/request schema, the `player-images` bucket configuration, and an initial active LAN. The second adds free-for-all games; existing games remain team-based. The third adds the guided setup/start flow and required team names. The fourth saves the picker theme and authorizes changes between picks.
 
 ## Apply to your project
 
 1. Open your project in the Supabase Dashboard and open **SQL Editor**.
-2. Run each unapplied migration **once**, as the database owner, in the order above. If MVP and game formats are already installed, run only `migrations/202611090002_guided_game_flow.sql`. Do not rerun installed migrations. Each migration uses one transaction: a failure rolls the whole change back. If an error occurs, stop and resolve it rather than running fragments independently.
+2. Run each unapplied migration **once**, as the database owner, in the order above. If the first three migrations are already installed, run only `migrations/202611100001_themed_picker.sql`. Do not rerun installed migrations. Each migration uses one transaction: a failure rolls the whole change back. If an error occurs, stop and resolve it rather than running fragments independently.
 3. In **Authentication → Users**, find the organizer account already created during project setup. Enroll it through SQL Editor:
 
    ```sql
@@ -35,6 +35,7 @@ All mutations take `p_input` (JSON) and `p_request_id` (UUID). The client retain
 | `setup_game` | Saves game details and 2–64 selected players together. Team games prepare or resume a draft; changed assignments require confirmation. Free-for-all prepares and starts atomically. Rejects setup while another game is active. |
 | `create_game` | Creates a game in the explicitly selected active session, with `format` (`teams` by default, or `ffa`) and higher/lower result ranking. |
 | `prepare_draw` | Validates 2–64 participants. Team games create 2–8 teams and privately save a shuffled player sequence. Free-for-all games immediately become ready, using one result entry per player. Replacing setup requires confirmation and a matching revision. |
+| `set_picker_mode` | Saves `rifle` or `trackmania` for a team draft with admin, active-LAN, lifecycle, and revision checks. Rejects changes during a reserved pick; leaves assignments and the private sequence unchanged. |
 | `begin_roll` | Reserves or resumes the next private pick for an admin. Public viewers receive only progress metadata. |
 | `commit_roll` | Reveals that reserved player into the next round-robin team exactly once; advances draft revision and progress. |
 | `start_game` | Requires every assignment to be complete, validates and saves distinct team names (1–40 characters), then starts the game and locks setup. Serializes competing starts using the active LAN lock. |
@@ -53,6 +54,8 @@ No local database test harness is installed. The migration has not been executed
 - Open the app signed out: read standings and reports; no player/draft/score actions should be available. A non-admin Auth user must also be denied all mutation RPCs, including direct calls.
 - Sign in with the enrolled organizer. Add at least five players; upload a PNG and enter a profile title. Refresh and check persistence, then edit a profile. Bad MIME types or files above 2 MiB should be rejected.
 - Select **Start new game**, choose five players and two teams, and spin through it. Picks must alternate A/B/A/B/A with no duplicate players. Check the public view in another browser or private window: it may see participants, never the private future sequence.
+- Switch rifle/car modes between picks, refresh, and verify the saved mode and assignments. A non-admin direct mode request, stale revision, or attempt during a pending pick must fail.
+- In both themes, check the visual target against the committed roster. A failed commit must show no successful shot/collision and must resume the same player. Verify spinning/impact sound, sound on/off, mute persistence, reduced motion, and layout at 2, 8, 16, and 64 participants. Hidden tabs and completed draws must stop audio and autoplay.
 - Interrupt an unfinished roll, refresh, and resume. It must select the same reserved player. Try a second admin tab: stale operations must fail/reload without double assignments.
 - After the draw, enter distinct team names and start the game. Confirm it returns to the scoreboard with an active-game tile. Reopen the tile and verify named rosters and **End game**. It must no longer allow a redraw. Record team results and preview/apply equal, split-pool, and custom awards. Use a three-member split of 10 to check 3.33/3.33/3.34.
 - Create a free-for-all game and select participants. **Start game** must return directly to the scoreboard without a draft or team naming; verify further participant changes are rejected. Enter separate results and points for each player; preview, save, and correct an award. Test lower-is-better times and more than eight participants. Confirm existing team games still use their draft and award rules.

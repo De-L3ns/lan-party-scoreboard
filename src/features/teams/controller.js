@@ -1,114 +1,142 @@
-import { animateWheel, renderWheel } from './wheel.js';
-import { escapeHtml as h, imageMarkup, installImageFallbacks } from '../../lib/html.js';
+import { PickerView } from './view.js';
+import { getPickerAudio } from './audio.js';
+import { PICKER_MODES } from '../../domain/picker.js';
+import { checkSignal, wait } from './motion.js';
 
 export class DraftController {
-  constructor(root, { api, refresh, notify, onStateChange = () => {} }) {
-    this.root = root; this.api = api; this.refresh = refresh; this.notify = notify;
-    this.onStateChange = onStateChange;
-    this.epoch = 0; this.autoplay = false; this.busy = false;
-    root.innerHTML = '<div class="draft-caption"><span class="draft-target"></span><span class="draft-count"></span></div><div class="wheel-stage"></div><div class="pick-result" role="status" aria-live="polite"></div><div class="draft-buttons"><button class="button primary spin-button">Spin for a player ↻</button><button class="button auto-button" aria-pressed="false">Auto draw</button></div>';
-    this.$ = (selector) => root.querySelector(selector);
-    this.$('.spin-button').onclick = () => { this.autoplay = false; void this.spin(); };
-    this.$('.auto-button').onclick = () => {
-      this.autoplay = !this.autoplay;
-      this.buttons();
-      if (this.autoplay && !this.busy) void this.spin();
-      else if (!this.autoplay) clearTimeout(this.timer);
-    };
+  constructor(root, { api, refresh, notify, onStateChange = () => {}, view, audio, isHidden = () => document.hidden, pause = wait }) {
+    this.root = root; this.api = api; this.refresh = refresh; this.notify = notify; this.onStateChange = onStateChange;
+    this.view = view || new PickerView(root, api); this.audio = audio || getPickerAudio(); this.isHidden = isHidden; this.pause = pause;
+    this.epoch = 0; this.autoplay = false; this.busy = false; this.disposed = false;
+    this.unsubscribeAudio = this.audio.subscribe((state) => this.view.audio(state));
+    this.view.bind({
+      spin: () => { this.autoplay = false; void this.spin(); },
+      autoplay: () => this.toggleAuto(), mode: (mode) => void this.setMode(mode),
+      sound: () => void this.toggleSound(),
+    });
   }
+  get mode() { return this.game?.picker_mode || 'rifle'; }
+  get navigationLocked() { return this.busy || Boolean(this.canWrite && this.game?.rolling); }
 
   update(game, canWrite) {
-    if (this.game && this.game.id !== game.id) this.stop();
-    this.game = game; this.canWrite = canWrite;
-    if (!canWrite && this.busy) this.stop();
-    this.root.hidden = game.status === 'ready' && !this.busy;
-    this.$('.draft-count').textContent = `${game.pick_count} / ${game.total_players}`;
-    this.buttons();
-    if (this.busy) return;
-    const signature = `${game.id}:${game.draft_revision}:${game.pick_count}:${game.rolling}:${canWrite}`;
-    if (this.signature === signature) return;
-    this.signature = signature;
-    this.animation?.cancel();
-    const picked = game.teams.flatMap((team) => team.members).sort((a, b) => b.pick_index - a.pick_index)[0];
-    this.$('.draft-target').textContent = game.status === 'drafting' ? `Next: Team ${String.fromCharCode(65 + game.pick_count % game.team_count)}` : 'Teams ready';
-    if (game.status === 'ready') {
-      this.$('.wheel-stage').replaceChildren();
-      this.$('.pick-result').replaceChildren();
-    } else if (game.rolling) {
-      this.$('.wheel-stage').innerHTML = renderWheel(this.remaining());
-      this.$('.pick-result').textContent = 'Picking a player…';
-      const wheel = this.$('.draw-wheel');
-      if (wheel && !document.hidden && Date.now() - Date.parse(game.roll_started_at) < 12000 && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        this.animation = wheel.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], { duration: 1800, iterations: Infinity });
-      }
-    } else if (picked) {
-      this.$('.wheel-stage').innerHTML = game.status === 'drafting' ? renderWheel(this.remaining()) : '';
-      this.showSelection(game.participants.find((player) => player.player_id === picked.player_id), game.teams.find((team) => team.id === picked.team_id).name);
-    } else {
-      this.$('.wheel-stage').innerHTML = renderWheel(this.remaining());
-      this.$('.pick-result').textContent = '';
+    if (this.disposed) return;
+    const previous = this.game;
+    const roster = game.participants.map((player) => player.player_id).sort().join(',');
+    const reset = previous && (previous.id !== game.id || this.roster !== roster || game.pick_count < this.lastCount);
+    this.game = game; this.canWrite = canWrite; this.roster = roster;
+    if (reset || (this.busy && this.kind !== 'observer' && !canWrite)) this.stop(false);
+    if (this.busy) { this.lastCount = game.pick_count; this.buttons(); return; }
+    this.view.update(game);
+    const newPick = previous && !reset && this.lastCount + 1 === game.pick_count;
+    this.lastCount = game.pick_count;
+    if (newPick && !this.isHidden()) {
+      const pick = game.teams.flatMap((team) => team.members).find((member) => member.pick_index === game.pick_count - 1);
+      if (pick) { void this.observe(pick); return; }
     }
+    if (game.status === 'ready') { this.audio.stopAll(); this.view.complete(); }
+    else if (game.rolling && !this.isHidden()) this.view.pending(game.roll_started_at);
+    else { this.view.stopGeneric(); this.audio.stopSpin(); }
+    this.buttons();
   }
-
-  remaining() {
-    const assigned = new Set(this.game.teams.flatMap((team) => team.members.map((member) => member.player_id)));
-    return this.game.participants.filter((player) => !assigned.has(player.player_id));
-  }
-
   buttons() {
-    const enabled = this.canWrite && this.game?.status === 'drafting';
-    this.$('.draft-buttons').hidden = !enabled;
-    this.$('.spin-button').disabled = this.busy;
-    this.$('.spin-button').textContent = this.busy ? 'Spinning…' : this.game?.rolling ? 'Resume pick ↻' : 'Spin for a player ↻';
-    this.$('.auto-button').textContent = this.autoplay ? 'Pause auto draw' : 'Auto draw';
-    this.$('.auto-button').setAttribute('aria-pressed', String(this.autoplay));
+    if (!this.game || this.disposed) return;
+    this.view.controls({ canWrite: this.canWrite && this.game.status === 'drafting', busy: this.busy, pending: this.game.rolling, autoplay: this.autoplay, complete: this.game.status === 'ready', saving: this.kind === 'mode' });
     this.onStateChange();
   }
-
-  showSelection(player, team) {
-    this.$('.pick-result').innerHTML = `<div class="selected-player">${imageMarkup(this.api.imageUrl(player.image_path), player.name)}<div><strong>${h(player.name)}</strong><small>${h(player.titles.join(' · '))}</small></div><span>${h(team)}</span></div>`;
-    installImageFallbacks(this.root);
+  begin(kind) {
+    this.busy = true; this.kind = kind; this.control = new AbortController(); this.buttons();
+    return { epoch: ++this.epoch, signal: this.control.signal };
   }
-
+  async recover(error, signal) {
+    if (signal.aborted || error.name === 'AbortError' || this.disposed) return;
+    this.autoplay = false; this.notify(`${error.message} Refresh and resume the pick if needed.`, true);
+    try { await this.refresh(); } catch { /* Keep the original failure visible and the reserved outcome intact. */ }
+  }
+  finish(epoch) {
+    if (epoch !== this.epoch || this.disposed) return;
+    this.busy = false; this.kind = null; this.control = null; this.audio.stopAll(); this.view.cancel();
+    this.view.update(this.game); this.lastCount = this.game.pick_count;
+    if (this.game.status === 'ready') this.view.complete();
+    this.buttons();
+    if (this.autoplay && this.canWrite && this.game.status === 'drafting' && !this.isHidden()) this.timer = setTimeout(() => void this.spin(), 950);
+    else { this.autoplay = false; this.buttons(); }
+  }
   async spin() {
-    if (this.busy || !this.canWrite || this.game.status !== 'drafting') return;
-    this.busy = true; this.buttons();
+    if (this.disposed || this.busy || !this.canWrite || this.game?.status !== 'drafting' || this.isHidden()) return;
     clearTimeout(this.timer);
-    const epoch = ++this.epoch;
-    const gameId = this.game.id;
+    const { epoch, signal } = this.begin('admin'), game = this.game, mode = this.mode;
     try {
-      const roll = await this.api.mutate('begin_roll', { game_id: gameId, revision: this.game.draft_revision });
-      if (epoch !== this.epoch || document.hidden) return;
-      this.$('.draft-target').textContent = `Picking for Team ${String.fromCharCode(65 + roll.team_position)}`;
-      this.$('.pick-result').textContent = 'Picking a player…';
-      this.animation?.cancel();
-      this.animation = await animateWheel(this.$('.wheel-stage'), this.remaining(), roll.player.player_id);
-      await this.animation.finished;
-      if (epoch !== this.epoch || document.hidden) return;
-      await this.api.mutate('commit_roll', { game_id: gameId, roll_id: roll.id, revision: roll.revision });
-      await this.refresh();
+      // Unlock synchronously from the click, before the network/animation awaits.
+      const audioReady = this.audio.unlock();
+      this.view.cancel();
+      const roll = await this.api.mutate('begin_roll', { game_id: game.id, revision: game.draft_revision });
+      checkSignal(signal); if (this.isHidden()) { this.stop(); return; }
+      await audioReady; checkSignal(signal);
+      if (!this.view.reduced()) this.audio.startSpin(mode);
+      await this.view.aim(roll.player.player_id, { signal, tick: () => this.audio.tick() });
+      this.audio.stopSpin();
+      await this.pause(this.view.reduced() ? 40 : 320, signal);
+      if (mode === 'trackmania') { this.audio.drive(); await this.view.drive(roll.player.player_id, signal); }
+      checkSignal(signal); if (this.isHidden()) { this.stop(); return; }
+      // Alignment/contact is cosmetic; success effects require a committed pick.
+      await this.api.mutate('commit_roll', { game_id: game.id, roll_id: roll.id, revision: roll.revision });
+      checkSignal(signal); if (this.isHidden()) { this.stop(); return; }
+      this.lastCount = Math.max(this.lastCount || 0, roll.index + 1);
+      this.audio.impact(mode);
+      const team = this.game.teams.find((row) => row.position === roll.team_position);
+      this.view.announce(`${roll.player.name} → ${team?.name || `Team ${String.fromCharCode(65 + roll.team_position)}`}`);
+      await Promise.all([this.view.impact(roll.player.player_id, signal), this.refresh()]);
+    } catch (error) { await this.recover(error, signal); }
+    finally { this.finish(epoch); }
+  }
+  async observe(pick) {
+    const { epoch, signal } = this.begin('observer'), mode = this.mode;
+    const player = this.game.participants.find((row) => row.player_id === pick.player_id);
+    const team = this.game.teams.find((row) => row.id === pick.team_id);
+    try {
+      if (!player || !team) return;
+      // Only published membership reaches this path; private targets stay private.
+      if (!this.view.reduced()) this.audio.startSpin(mode, .6);
+      await this.view.aim(player.player_id, { signal, duration: 600, tick: () => this.audio.tick() });
+      this.audio.stopSpin();
+      if (mode === 'trackmania') { this.audio.drive(); await this.view.drive(player.player_id, signal); }
+      checkSignal(signal); if (this.isHidden()) return;
+      this.audio.impact(mode); this.view.announce(`${player.name} → ${team.name}`);
+      await this.view.impact(player.player_id, signal);
+    } catch { /* A cancelled observer animation never changes the published outcome. */ }
+    finally { this.finish(epoch); }
+  }
+  toggleAuto() {
+    if (!this.canWrite || this.game?.status !== 'drafting' || this.kind === 'mode') return;
+    this.autoplay = !this.autoplay; clearTimeout(this.timer); this.buttons();
+    if (this.autoplay && !this.busy) void this.spin();
+  }
+  async setMode(mode) {
+    if (!PICKER_MODES.includes(mode) || !this.canWrite || this.busy || this.game?.rolling || this.game?.status !== 'drafting') return;
+    this.autoplay = false; clearTimeout(this.timer); this.audio.stopAll(); this.view.cancel();
+    if (mode === this.mode) { this.buttons(); return; }
+    const { epoch, signal } = this.begin('mode');
+    try {
+      await this.api.mutate('set_picker_mode', { game_id: this.game.id, revision: this.game.draft_revision, picker_mode: mode });
+      checkSignal(signal); await this.refresh();
     } catch (error) {
-      this.autoplay = false;
-      if (epoch === this.epoch && error.name !== 'AbortError') this.notify(`${error.message} Refresh, then resume the pick if needed.`, true);
-      await this.refresh();
-    } finally {
-      if (epoch === this.epoch) {
-        this.busy = false; this.signature = null;
-        this.update(this.game, this.canWrite);
-        if (this.autoplay && this.canWrite && this.game.status === 'drafting') this.timer = setTimeout(() => void this.spin(), 1500);
-        else this.autoplay = false;
-        this.buttons();
-      }
+      if (!signal.aborted) { this.notify(error.message, true); try { await this.refresh(); } catch { /* Retry through Refresh. */ } }
+    } finally { this.finish(epoch); }
+  }
+  async toggleSound() {
+    this.audio.setEnabled(!this.audio.enabled);
+    if (this.audio.enabled && await this.audio.unlock()) {
+      if (this.busy && this.view.spinning) this.audio.startSpin(this.mode, this.view.remainingDuration);
+      else if (!this.busy) this.audio.preview(this.mode);
     }
   }
-
-  stop() {
-    this.epoch += 1; this.autoplay = false; this.busy = false;
-    clearTimeout(this.timer); this.animation?.cancel(); this.signature = null;
-    if (this.game) { this.buttons(); this.update(this.game, this.canWrite); }
+  stop(render = true) {
+    this.epoch += 1; this.autoplay = false; clearTimeout(this.timer); this.control?.abort(); this.control = null;
+    this.busy = false; this.kind = null; this.audio.stopAll(); this.view.cancel();
+    if (render && this.game && !this.disposed) { this.view.update(this.game); if (this.game.status === 'ready') this.view.complete(); this.buttons(); }
   }
-
   dispose() {
-    this.epoch += 1; this.autoplay = false; clearTimeout(this.timer); this.animation?.cancel();
+    if (this.disposed) return;
+    this.stop(false); this.disposed = true; this.unsubscribeAudio(); this.view.dispose();
   }
 }
