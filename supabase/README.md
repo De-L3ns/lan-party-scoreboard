@@ -1,11 +1,11 @@
 # Supabase MVP setup
 
-Apply migrations in order: `migrations/202611080001_mvp.sql`, `migrations/202611090001_game_formats.sql`, `migrations/202611090002_guided_game_flow.sql`, then `migrations/202611100001_themed_picker.sql`. The first creates the application tables, public read policies, admin-checked transactional functions, a private draft/request schema, the `player-images` bucket configuration, and an initial active LAN. The second adds free-for-all games; existing games remain team-based. The third adds the guided setup/start flow and required team names. The fourth saves the picker theme and authorizes changes between picks.
+Apply migrations in order: `migrations/202611080001_mvp.sql`, `migrations/202611090001_game_formats.sql`, `migrations/202611090002_guided_game_flow.sql`, `migrations/202611100001_themed_picker.sql`, then `migrations/202611110001_knockout_tournament.sql`. The first creates the application tables, public read policies, admin-checked transactional functions, a private draft/request schema, the `player-images` bucket configuration, and an initial active LAN. The second adds free-for-all games; existing games remain team-based. The third adds the guided setup/start flow and required team names. The fourth saves the picker theme and authorizes changes between picks. The fifth adds knockout tournaments, private seed layouts/reveal reservations, published matches/events, audited winner/undo operations, and bracket-validated individual awards.
 
 ## Apply to your project
 
 1. Open your project in the Supabase Dashboard and open **SQL Editor**.
-2. Run each unapplied migration **once**, as the database owner, in the order above. If the first three migrations are already installed, run only `migrations/202611100001_themed_picker.sql`. Do not rerun installed migrations. Each migration uses one transaction: a failure rolls the whole change back. If an error occurs, stop and resolve it rather than running fragments independently.
+2. Run each unapplied migration **once**, as the database owner, in the order above. If the first four migrations are already installed, run only `migrations/202611110001_knockout_tournament.sql`; otherwise apply all remaining migrations in order. Do not rerun installed migrations. Each migration uses one transaction: a failure rolls the whole change back. If an error occurs, stop and resolve it rather than running fragments independently.
 3. In **Authentication → Users**, find the organizer account already created during project setup. Enroll it through SQL Editor:
 
    ```sql
@@ -32,20 +32,24 @@ All mutations take `p_input` (JSON) and `p_request_id` (UUID). The client retain
 | `read_board(p_session_id)` | Public active LAN snapshot, or an archived snapshot for an admin. Includes standings, games, participant/team snapshots, and published picks. Only admins receive roster management data, archive choices, and score history. |
 | `is_admin()` | Checks the current Auth user's enrollment. |
 | `save_player` | Add/edit/archive a player, using profile revision checks. Updates active LAN profile snapshots without changing prior games or archived LANs. |
-| `setup_game` | Saves game details and 2–64 selected players together. Team games prepare or resume a draft; changed assignments require confirmation. Free-for-all prepares and starts atomically. Rejects setup while another game is active. |
-| `create_game` | Creates a game in the explicitly selected active session, with `format` (`teams` by default, or `ffa`) and higher/lower result ranking. |
-| `prepare_draw` | Validates 2–64 participants. Team games create 2–8 teams and privately save a shuffled player sequence. Free-for-all games immediately become ready, using one result entry per player. Replacing setup requires confirmation and a matching revision. |
+| `setup_game` | Saves game details and 2–64 selected players together. Team games prepare or resume a draft; changed assignments require confirmation. Free-for-all prepares and starts atomically. Knockout prepares or resumes a private shuffled bracket for pair-by-pair publication, without starting. Rejects setup while another game is active. |
+| `create_game` | Creates a game in the explicitly selected active session, with `format` (`teams` by default, `ffa`, or `knockout`) and higher/lower result ranking. |
+| `prepare_draw` | Validates 2–64 participants. Team games create 2–8 teams and privately save a shuffled player sequence. Free-for-all games immediately become ready, using one result entry per player. Knockout creates singleton award entries plus a private seeded layout and unpublished opening slots; byes publish/advance with their opening slot. Replacing setup requires confirmation and a matching revision. |
 | `set_picker_mode` | Saves `rifle` or `trackmania` for a team draft with admin, active-LAN, lifecycle, and revision checks. Rejects changes during a reserved pick; leaves assignments and the private sequence unchanged. |
 | `begin_roll` | Reserves or resumes the next private pick for an admin. Public viewers receive only progress metadata. |
 | `commit_roll` | Reveals that reserved player into the next round-robin team exactly once; advances draft revision and progress. |
-| `start_game` | Requires every assignment to be complete, validates and saves distinct team names (1–40 characters), then starts the game and locks setup. Serializes competing starts using the active LAN lock. |
-| `save_result` | Requires a started or completed game and validates complete individual/team results and allocations, records an audit event, updates current awards, and inserts only the difference from the previous award into the score ledger. Checks both game result and board preview revisions. |
+| `begin_knockout_reveal` | Reserves/resumes the next opening bracket position. Requires knockout drafting state, active LAN, admin, and matching tournament revision. Returns a reservation token, never a new client-selected pair. |
+| `commit_knockout_reveal` | Publishes that reserved pairing/bye once, updates progress, advances byes, and publishes its event atomically. Requires the reservation token and matching tournament revision. |
+| `record_knockout_winner` | Records a participant of a ready, started knockout match, advances the winner through fixed feeder links, publishes newly ready pairings, and preserves an audit record. Requires the tournament revision. No leaderboard points change. |
+| `undo_knockout_result` | Confirms and reverses only the latest unreversed played result during `playing`, clears invalidated downstream slots/events, and retains the original audit record and reversal actor/time. Requires the expected result ID and tournament revision. |
+| `start_game` | Requires every assignment to be complete, validates and saves distinct team names (1–40 characters), then starts the game and locks setup. Knockout requires every opening slot published and skips naming. Serializes competing starts using the active LAN lock. |
+| `save_result` | Requires a started or completed game and validates complete individual/team results and allocations, records an audit event, updates current awards, and inserts only the difference from the previous award into the score ledger. Checks both game result and board preview revisions. Knockout additionally requires its tournament revision and a decided final, and validates read-only finishing places and individual awards against the bracket. |
 | `adjust_points` | Records a reasoned individual adjustment or a single reversal of a previous adjustment. |
 | `reset_lan` | Privately archives the specified active LAN and starts a fresh session with zero points and the retained active roster. |
 
 Each state-changing request locks the active LAN before changing its game or score rows. Result corrections preserve earlier ledger events. Totals are derived from the ledger, not directly editable totals.
 
-Free-for-all games reuse the result and correction pipeline by storing each participant as a single-member result entry in `teams`. The UI presents individual players. `read_board` includes `games.format` automatically; free-for-all setup creates no private wheel sequence. Team-count validation remains capped at eight for team-based games.
+Free-for-all games reuse the result and correction pipeline by storing each participant as a single-member result entry in `teams`. The UI presents individual players. Knockout also uses single-member award entries (up to 64), with bracket matches stored separately. `read_board` includes published `knockout_matches`, `knockout_events` with string event IDs, and admin-only `knockout_last_result`/`knockout_history`. Seed layout and pending reservations are never exposed through the board or public tables. All match commands check `tournament_revision`; point awards still use result/board revisions too. `read_board` includes `games.format` automatically; free-for-all setup creates no private wheel sequence. Team-count validation remains capped at eight for team-based games.
 
 ## Manual acceptance checklist
 
@@ -65,6 +69,12 @@ No local database test harness is installed. The migration has not been executed
 - Change a player's name/artwork after a game. The leaderboard can update, but that game's roster must retain its snapshot.
 - Export a report, then archive/reset the disposable LAN. The new session should have zero scores and retained players; only the admin may select the old session. A direct anonymous `read_board` request for that archive must fail.
 - Briefly disconnect a client. It must show stale/offline state, disable writes, and refetch on reconnect. Repeat the key read/admin flows on a phone.
+
+### Knockout database verification
+
+The new SQL migration and the rollback-only acceptance script have been syntax-checked, not executed against a database. After applying all migrations, run `tests/004_knockout_tournament.sql` as database owner against a disposable project with an enrolled organizer and an active LAN named `TEST - ...` with no active game. It verifies representative rosters from 2 through 64 players, seed privacy/grants, non-admin RPC rejection, byes, reveal/result retry deduplication, stale winner rejection, chronological undo/audit, champion completion, forged-place rejection, and difference-only award corrections. Success ends in `ROLLBACK`; it retains no test data. This script is not a local database harness and does not apply migrations.
+
+Use [spec 004 acceptance scenarios](../docs/specs/004-knockout-tournament.md#11-acceptance-scenarios) for the remaining manual checks, particularly cross-device reveals, competing admin tabs, private archives, long tags, projector/mobile layout, and keyboard/reduced-motion behavior.
 
 The JSON report export is for inspection and audit, not a complete recovery backup. Use Supabase database exports and a separate copy of Storage files before material maintenance.
 

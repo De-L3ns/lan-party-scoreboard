@@ -2,12 +2,14 @@ import { renderLeaderboard } from './features/leaderboard/view.js';
 import { renderGames, renderTeams, statusLabel, formatLabel } from './features/games/view.js';
 import { GameSetup, TeamNames } from './features/games/setup.js';
 import { DraftController } from './features/teams/controller.js';
+import { KnockoutController } from './features/knockout/controller.js';
+import { knockoutChampion } from './domain/knockout.js';
 import { createAdminForms } from './features/admin/forms.js';
 import { activeGame, gameScreen } from './domain/game-flow.js';
 import { createApi } from './lib/api.js';
 import { createDialog } from './lib/dialog.js';
 import { createPageForm } from './lib/page-form.js';
-import { escapeHtml as h } from './lib/html.js';
+import { escapeHtml as h, setHtml } from './lib/html.js';
 
 const readRoute = () => {
   const hash = location.hash.slice(1);
@@ -37,6 +39,7 @@ export function mountApp(root, { config, supabase }) {
   let route = readRoute();
   let workspaceKey;
   let draw;
+  let knockout;
   let setup;
   let names;
   let resultPage;
@@ -50,7 +53,7 @@ export function mountApp(root, { config, supabase }) {
   const api = supabase ? createApi(supabase) : null;
   const mutable = () => Boolean(board?.is_admin && board.session.active && !stale && navigator.onLine && !commandBusy);
   const currentGame = () => board?.games.find((game) => game.id === route.id);
-  const workspaceBusy = () => Boolean(draw?.navigationLocked || setup?.busy || names?.busy || resultPage?.busy);
+  const workspaceBusy = () => Boolean(draw?.navigationLocked || knockout?.navigationLocked || setup?.busy || names?.busy || resultPage?.busy);
 
   function notify(message, error = false) {
     clearTimeout(messageTimer);
@@ -61,8 +64,8 @@ export function mountApp(root, { config, supabase }) {
   }
   function connection(message) { $('.connection-text').textContent = message; $('.connection-notice').hidden = !message; }
   function resetWorkspace() {
-    draw?.dispose(); setup?.dispose(); names?.dispose(); resultPage?.dispose();
-    draw = null; setup = null; names = null; resultPage = null; workspaceKey = null;
+    draw?.dispose(); knockout?.dispose(); setup?.dispose(); names?.dispose(); resultPage?.dispose();
+    draw = null; knockout = null; setup = null; names = null; resultPage = null; workspaceKey = null;
   }
   function writeRoute() {
     const hash = route.newGame ? '#new-game' : route.id ? `#game=${encodeURIComponent(route.id)}${route.step ? `&step=${route.step}` : ''}` : '';
@@ -75,20 +78,20 @@ export function mountApp(root, { config, supabase }) {
   function selectSession(id) { selectedSession = id; }
   function focusPage() { $('#main').focus({ preventScroll: true }); window.scrollTo({ top: 0, behavior: 'instant' }); }
   function renderProgress(format, screen) {
-    const steps = format === 'ffa' ? ['players'] : ['players', 'draw', 'names'];
+    const steps = format === 'ffa' ? ['players'] : format === 'knockout' ? ['players', 'draw'] : ['players', 'draw', 'names'];
     const index = steps.indexOf(screen);
     $('#setup-progress').hidden = index < 0;
-    $('#setup-progress').innerHTML = steps.map((step, i) => `<span class="flow-step ${i === index ? 'current' : i < index ? 'done' : ''}" ${i === index ? 'aria-current="step"' : ''}><span>${i < index ? '✓' : i + 1}</span>${({ players: 'Players', draw: 'Team assignment', names: 'Team names' })[step]}</span>`).join('');
+    setHtml($('#setup-progress'), steps.map((step, i) => `<span class="flow-step ${i === index ? 'current' : i < index ? 'done' : ''}" ${i === index ? 'aria-current="step"' : ''}><span>${i < index ? '✓' : i + 1}</span>${({ players: 'Players', draw: format === 'knockout' ? 'Tournament bracket' : 'Team assignment', names: 'Team names' })[step]}</span>`).join(''));
   }
 
   function renderWorkspace(game, screen) {
     const canWrite = mutable();
     const canSetup = canWrite && !activeGame(board.games);
-    const key = `${board.session.id}:${game?.id || 'new'}:${screen}`;
+    const key = `${board.session.id}:${game?.id || 'new'}:${game?.format || 'new'}:${screen}`;
     const changed = workspaceKey !== key;
     if (changed) { resetWorkspace(); workspaceKey = key; $('#flow-content').replaceChildren(); }
-    $('#flow-title').textContent = ({ players: 'Who’s playing?', draw: 'Assign teams', names: 'Name the teams', results: `Results: ${game?.name}` })[screen] || game?.name;
-    $('.game-description').textContent = game ? (['players', 'draw', 'names'].includes(screen) ? (screen === 'players' ? '' : game.name) : [formatLabel(game), game.details, game.direction === 'lower' ? 'Lowest score/time wins' : 'Highest score wins'].filter(Boolean).join(' · ')) : '';
+    $('#flow-title').textContent = ({ players: 'Who’s playing?', draw: game?.format === 'knockout' ? 'Tournament bracket' : 'Assign teams', names: 'Name the teams', results: `Results: ${game?.name}` })[screen] || game?.name;
+    $('.game-description').textContent = game ? (['players', 'draw', 'names'].includes(screen) ? (screen === 'players' ? '' : game.name) : [formatLabel(game), game.details, game.format === 'knockout' ? 'Single elimination' : game.direction === 'lower' ? 'Lowest score/time wins' : 'Highest score wins'].filter(Boolean).join(' · ')) : '';
     $('.game-status').textContent = ['playing', 'report'].includes(screen) ? statusLabel(game) : '';
     renderProgress(game?.format, screen);
     const content = $('#flow-content');
@@ -98,8 +101,16 @@ export function mountApp(root, { config, supabase }) {
         const result = await api.mutate('setup_game', input);
         selectGame(result.status === 'playing' ? null : result.id, result.status === 'playing' ? '' : 'draw');
         await refresh(); focusPage();
+        if (input.format === 'knockout' && route.id === result.id) void knockout?.draw();
       } });
       else setup.update(board, canSetup);
+    } else if (game?.format === 'knockout' && screen !== 'results') {
+      if (!knockout) knockout = new KnockoutController(content, { api, refresh, notify,
+        onStarted: async () => { selectGame(null); await refresh(); focusPage(); },
+        onUndo: (input) => dialog.open({ title: 'Undo last match result?', content: '<p>The last winner will return to their match. Their next-round slot will be cleared.</p>', submit: 'Undo result',
+          onSubmit: () => knockout?.undo(input) ?? false }),
+      });
+      knockout.update(game, canWrite, canSetup);
     } else if (screen === 'draw') {
       if (changed) {
         content.innerHTML = '<div class="draft-layout"><div id="game-draft"></div><div id="team-rosters" class="team-grid"></div></div><div class="flow-actions"><button class="button" data-action="edit-setup">Edit players / teams</button><button class="button primary" data-action="name-teams" hidden>Name the teams →</button></div>';
@@ -128,7 +139,7 @@ export function mountApp(root, { config, supabase }) {
     } else {
       if (changed) content.innerHTML = '<div id="team-rosters" class="team-grid game-rosters"></div><div id="game-actions" class="flow-actions"></div>';
       renderTeams($('#team-rosters'), game, api);
-      $('#game-actions').innerHTML = canWrite ? `<button class="button primary" data-action="result">${screen === 'playing' ? 'End game' : 'Correct result'}</button>` : '';
+      setHtml($('#game-actions'), canWrite ? `<button class="button primary" data-action="result">${screen === 'playing' ? 'End game' : 'Correct result'}</button>` : '');
     }
   }
 
@@ -139,7 +150,7 @@ export function mountApp(root, { config, supabase }) {
     $('.admin-menu').hidden = !board.is_admin;
     $('.admin-actions').querySelectorAll('button').forEach((button) => { button.disabled = button.dataset.action === 'history' ? false : !mutable(); });
     $('[data-action=adjust]').disabled = !mutable() || !board.players.length;
-    $('#session-select').innerHTML = board.sessions.map((session) => `<option value="${session.id}" ${session.id === board.session.id ? 'selected' : ''}>${h(session.name)}${session.active ? ' (active)' : ''}</option>`).join('');
+    setHtml($('#session-select'), board.sessions.map((session) => `<option value="${session.id}" ${session.id === board.session.id ? 'selected' : ''}>${h(session.name)}${session.active ? ' (active)' : ''}</option>`).join(''));
     $('[data-action=start-new-game]').hidden = !board.is_admin || !board.session.active;
     $('[data-action=start-new-game]').disabled = !mutable() || Boolean(activeGame(board.games));
     renderLeaderboard($('#leaderboard'), board.players, api);
@@ -222,16 +233,16 @@ export function mountApp(root, { config, supabase }) {
     if (action === 'name-teams' && currentGame()?.status === 'ready') { selectGame(route.id, 'names'); render(); focusPage(); }
     if (action === 'edit-setup' && ['setup', 'drafting', 'ready'].includes(currentGame()?.status)) { selectGame(route.id, 'players'); render(); focusPage(); }
     if (action === 'back-to-draw') { selectGame(route.id, 'draw'); render(); focusPage(); }
-    if (action === 'result' && ['playing', 'completed'].includes(currentGame()?.status)) { selectGame(route.id, 'results'); render(); focusPage(); }
+    if (action === 'result' && ['playing', 'completed'].includes(currentGame()?.status) && (currentGame().format !== 'knockout' || knockoutChampion(currentGame()))) { selectGame(route.id, 'results'); render(); focusPage(); }
   };
   root.addEventListener('click', onClick);
   $('#session-select').addEventListener('change', async (event) => {
     if (workspaceBusy()) { event.target.value = board.session.id; return; }
     resetWorkspace(); selectSession(event.target.value); selectGame(null); stale = true; render(); connection('Loading LAN…'); await refresh();
   });
-  const onOffline = () => { stale = true; draw?.stop(); connection('Offline — reconnect before editing.'); render(); };
+  const onOffline = () => { stale = true; draw?.stop(); knockout?.stop(); connection('Offline — reconnect before editing.'); render(); };
   const onOnline = () => void refresh();
-  const onVisibility = () => { if (document.hidden) draw?.stop(); else void refresh(); };
+  const onVisibility = () => { if (document.hidden) { draw?.stop(); knockout?.stop(); } else void refresh(); };
   const onHashChange = () => { if (workspaceBusy()) { writeRoute(); return; } resetWorkspace(); route = readRoute(); render(); };
   window.addEventListener('offline', onOffline); window.addEventListener('online', onOnline); window.addEventListener('hashchange', onHashChange); document.addEventListener('visibilitychange', onVisibility);
   const { data: authListener } = supabase.auth.onAuthStateChange((event) => {

@@ -23,7 +23,7 @@ test('correcting a previous result replaces its contribution', () => {
 });
 test('ties share a rank without mutating the roster', () => {
   const rows = [{ name: 'B', points: 10 }, { name: 'A', points: 10 }, { name: 'C', points: 5 }];
-  assert.deepEqual(rankPlayers(rows).map(({ name, rank }) => [name, rank]), [['A', 1], ['B', 1], ['C', 3]]);
+  assert.deepEqual(rankPlayers(rows).map(({ name, rank }) => [name, rank]), [['A', 1], ['B', 1], ['C', 2]]);
   assert.equal(rows[0].name, 'B');
 });
 test('draft destinations cycle A B C and keep extras on earliest teams', () => {

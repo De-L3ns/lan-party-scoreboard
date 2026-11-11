@@ -1,5 +1,6 @@
 import { escapeHtml as h, formatPoints, imageMarkup, installImageFallbacks } from '../../lib/html.js';
 import { previewAwards, toCents } from '../../domain/scoring.js';
+import { openKnockoutAwards } from '../knockout/awards.js';
 
 const field = (label, name, value = '', extra = '') => `<label>${h(label)}<input name="${name}" value="${h(value)}" ${extra}></label>`;
 
@@ -62,8 +63,11 @@ export function createAdminForms({ dialog, api, client, config, getBoard, refres
 
     result(game, presenter = dialog) {
       const board = getBoard();
+      if (game.format === 'knockout') return openKnockoutAwards(presenter, { game, board, api,
+        onSaved: async () => { selectGame(null); await refresh(); notify('Result saved.'); } });
       const freeForAll = game.format === 'ffa';
-      const read = (form) => game.teams.map((team) => {
+      const entries = game.teams;
+      const read = (form) => entries.map((team) => {
         const get = (key) => form.elements[`${team.id}-${key}`]?.value;
         const custom = Object.fromEntries(team.members.map((member) => [member.player_id, get(member.player_id)]));
         toCents(get('result'));
@@ -86,7 +90,7 @@ export function createAdminForms({ dialog, api, client, config, getBoard, refres
           form.querySelector('.result-preview').innerHTML = `<table><caption>Player points preview</caption><thead><tr><th>Player</th><th>Current</th><th>Award</th><th>New total</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${h(board.players.find((player) => player.id === row.player_id).name)}</td><td>${formatPoints(row.before)}</td><td>${formatPoints(row.award)}</td><td>${formatPoints(row.after)}</td></tr>`).join('')}</tbody></table>`;
         } catch (error) { form.querySelector('.result-preview').textContent = error.message; }
       };
-      const form = presenter.open({ title: `${game.score_revision ? 'Correct' : 'Record'} result: ${game.name}`, submit: 'Preview awards', content: `${game.teams.map((team) => `<fieldset class="result-team" data-team="${team.id}"><legend>${h(team.name)}</legend><div class="form-grid">${field(game.direction === 'lower' ? 'Result (lower wins)' : 'Result (higher wins)', `${team.id}-result`, team.result ?? '', 'inputmode="decimal" required')}
+      const form = presenter.open({ title: `${game.score_revision ? 'Correct' : 'Record'} result: ${game.name}`, submit: 'Preview awards', content: `${entries.map((team) => `<fieldset class="result-team" data-team="${team.id}"><legend>${h(team.name)}</legend><div class="form-grid">${field(game.direction === 'lower' ? 'Result (lower wins)' : 'Result (higher wins)', `${team.id}-result`, team.result ?? '', 'inputmode="decimal" required')}
         ${freeForAll ? '' : `<label>Award rule<select name="${team.id}-mode"><option value="equal" ${team.award?.mode === 'equal' ? 'selected' : ''}>Points per player</option><option value="split" ${team.award?.mode === 'split' ? 'selected' : ''}>Split total pool</option><option value="custom" ${team.award?.mode === 'custom' ? 'selected' : ''}>Custom per player</option></select></label>`}
         <div data-amount>${field(freeForAll ? 'Player points' : 'Award / pool', `${team.id}-amount`, team.award?.amount ?? '0', 'inputmode="decimal"')}</div></div><div data-custom class="form-grid">${freeForAll ? '' : team.members.map((member) => field(board.players.find((player) => player.id === member.player_id).name, `${team.id}-${member.player_id}`, team.award?.custom?.[member.player_id] ?? '0', 'inputmode="decimal"')).join('')}</div></fieldset>`).join('')}${field(game.score_revision ? 'Reason for correction' : 'Note (optional)', 'reason', '', `${game.score_revision ? 'required' : ''} maxlength="500"`)}<div class="result-preview"></div>`,
         onInput(form) {

@@ -14,14 +14,14 @@ export class GameSetup {
     this.page = createPageForm(root, { canSubmit: () => this.canWrite && this.valid });
     this.form = this.page.open({ title: 'Select players', submit: 'Assign teams', content: `<div class="setup-layout"><section><div class="roster-tools"><strong class="selected-count" role="status"></strong><button type="button" class="text-button select-all">Deselect all</button></div><div class="setup-roster"></div></section>
       <aside class="setup-settings"><label>Game name<input name="name" required maxlength="100" value="${h(game?.name ?? '')}"></label><label>Map / details<input name="details" maxlength="300" value="${h(game?.details ?? '')}"></label>
-      <label>Format<select name="format"><option value="teams" ${game?.format !== 'ffa' ? 'selected' : ''}>Team-based</option><option value="ffa" ${game?.format === 'ffa' ? 'selected' : ''}>Free-for-all</option></select></label>
-      <label>Ranking<select name="direction"><option value="higher" ${game?.direction !== 'lower' ? 'selected' : ''}>Highest score wins</option><option value="lower" ${game?.direction === 'lower' ? 'selected' : ''}>Lowest score/time wins</option></select></label>
+      <label>Format<select name="format"><option value="teams" ${!game || game.format === 'teams' ? 'selected' : ''}>Team-based</option><option value="ffa" ${game?.format === 'ffa' ? 'selected' : ''}>Free-for-all</option><option value="knockout" ${game?.format === 'knockout' ? 'selected' : ''}>Knockout Tournament</option></select></label>
+      <label class="ranking-field">Ranking<select name="direction"><option value="higher" ${game?.direction !== 'lower' ? 'selected' : ''}>Highest score wins</option><option value="lower" ${game?.direction === 'lower' ? 'selected' : ''}>Lowest score/time wins</option></select></label>
       <label class="team-count-field">Teams<select name="team_count">${Array.from({ length: 7 }, (_, i) => `<option value="${i + 2}" ${game?.team_count === i + 2 ? 'selected' : ''}>${i + 2}</option>`).join('')}</select></label>
       <label class="check-row redraw-confirm" hidden><input name="confirm_redraw" type="checkbox">Replace existing assignments</label><p class="selection-error form-error" role="status"></p></aside></div>`,
       onInput: () => this.updateControls(),
       onSubmit: async () => {
         const input = this.read();
-        if (input.format === 'ffa') validateParticipants(input.player_ids); else validateDraft(input.player_ids, input.team_count);
+        if (input.format === 'teams') validateDraft(input.player_ids, input.team_count); else validateParticipants(input.player_ids);
         await onSubmit({ ...input, ...(game ? { game_id: game.id, revision: game.draft_revision } : {}), session_id: board.session.id });
       },
     });
@@ -38,7 +38,7 @@ export class GameSetup {
 
   read() {
     const data = new FormData(this.form);
-    return { name: data.get('name').trim(), details: data.get('details').trim(), format: data.get('format'), direction: data.get('direction'), team_count: Number(data.get('team_count')), player_ids: data.getAll('player'), confirm_redraw: Boolean(data.get('confirm_redraw')) };
+    return { name: data.get('name').trim(), details: data.get('details').trim(), format: data.get('format'), direction: data.get('format') === 'knockout' ? 'lower' : data.get('direction'), team_count: Number(data.get('team_count')), player_ids: data.getAll('player'), confirm_redraw: Boolean(data.get('confirm_redraw')) };
   }
 
   updateControls() {
@@ -49,16 +49,17 @@ export class GameSetup {
     const redraw = needsRedraw(this.game, input);
     this.form.querySelector('.selected-count').textContent = `${count} selected`;
     this.form.querySelector('.select-all').textContent = [...this.form.querySelectorAll('[name=player]')].every((row) => row.checked) ? 'Deselect all' : 'Select all';
-    this.form.querySelector('.team-count-field').hidden = input.format === 'ffa';
+    this.form.querySelector('.team-count-field').hidden = input.format !== 'teams';
+    this.form.querySelector('.ranking-field').hidden = input.format === 'knockout';
     this.form.querySelector('.redraw-confirm').hidden = !redraw;
     this.form.elements.confirm_redraw.required = redraw;
     this.form.elements.name.setCustomValidity(input.name ? '' : 'Enter a game name.');
     let error = '';
-    try { if (input.format === 'ffa') validateParticipants(input.player_ids); else validateDraft(input.player_ids, input.team_count); }
+    try { if (input.format === 'teams') validateDraft(input.player_ids, input.team_count); else validateParticipants(input.player_ids); }
     catch (failure) { error = failure.message; }
     this.form.querySelector('.selection-error').textContent = error;
     this.valid = !error && Boolean(input.name) && (!redraw || input.confirm_redraw);
-    this.form.querySelector('[type=submit]').textContent = input.format === 'ffa' ? 'Start game' : 'Assign teams';
+    this.form.querySelector('[type=submit]').textContent = ({ ffa: 'Start game', teams: 'Assign teams', knockout: 'Draw tournament' })[input.format];
     this.page.update();
   }
 

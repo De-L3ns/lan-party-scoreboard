@@ -31,5 +31,9 @@ export function previewAwards(teams, players, previous = []) {
 
 export function rankPlayers(players) {
   const sorted = [...players].sort((a, b) => Number(b.points) - Number(a.points) || a.name.localeCompare(b.name));
-  return sorted.map((player, index) => ({ ...player, rank: index > 0 && Number(player.points) === Number(sorted[index - 1].points) ? sorted.findIndex((row) => Number(row.points) === Number(player.points)) + 1 : index + 1 }));
+  let rank = 0;
+  return sorted.map((player, index) => {
+    if (index === 0 || Number(player.points) !== Number(sorted[index - 1].points)) rank += 1;
+    return { ...player, rank };
+  });
 }

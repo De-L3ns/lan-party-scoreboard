@@ -30,6 +30,10 @@ Use `.env.local` for local public settings, starting from `.env.example`. Only v
 
 ## Runtime and data flow
 
+### Knockout tournament activation
+
+Knockout source is included with spec 004. Apply `supabase/migrations/202611110001_knockout_tournament.sql` after the four existing migrations, then rebuild/deploy using Node 24 and the existing Pages workflow. See [database setup](../supabase/README.md) for migration order, the added RPCs, and the rollback-only acceptance script. The coding agent has not applied the migration to the hosted database or performed browser/database acceptance checks. The standalone HTML mockup remains independent of the app.
+
 GitHub Pages serves the application to the browser. The browser reads public scoreboard data from Supabase and displays player images from Storage. Admins authenticate through Supabase Auth, then submit authorized changes to the Data API or database RPCs. Postgres remains the source of truth; Realtime notifications trigger fresh reads after committed changes.
 
 GitHub Pages hosts static HTML, CSS, and JavaScript and can serve build output; it does not provide the application with a private server runtime. Project sites also use a repository path, so assets, navigation, and Vite's base path must work under `/lan-party-scoreboard/`. Use in-page/hash navigation initially to avoid server-side routing requirements. See [GitHub Pages hosting](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages) and [Vite's GitHub Pages deployment guidance](https://vite.dev/guide/static-deploy).
