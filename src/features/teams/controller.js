@@ -44,6 +44,7 @@ export class DraftController {
     this.onStateChange();
   }
   begin(kind) {
+    this.view.setFullMotion?.(kind === 'admin');
     this.busy = true; this.kind = kind; this.control = new AbortController(); this.buttons();
     return { epoch: ++this.epoch, signal: this.control.signal };
   }
@@ -55,6 +56,7 @@ export class DraftController {
   finish(epoch) {
     if (epoch !== this.epoch || this.disposed) return;
     this.busy = false; this.kind = null; this.control = null; this.audio.stopAll(); this.view.cancel();
+    this.view.setFullMotion?.(false);
     this.view.update(this.game); this.lastCount = this.game.pick_count;
     if (this.game.status === 'ready') this.view.complete();
     this.buttons();
@@ -133,6 +135,7 @@ export class DraftController {
   stop(render = true) {
     this.epoch += 1; this.autoplay = false; clearTimeout(this.timer); this.control?.abort(); this.control = null;
     this.busy = false; this.kind = null; this.audio.stopAll(); this.view.cancel();
+    this.view.setFullMotion?.(false);
     if (render && this.game && !this.disposed) { this.view.update(this.game); if (this.game.status === 'ready') this.view.complete(); this.buttons(); }
   }
   dispose() {

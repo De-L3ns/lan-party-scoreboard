@@ -1,4 +1,5 @@
 import { renderLeaderboard } from './features/leaderboard/view.js';
+import { ScoreReveal } from './features/leaderboard/reveal.js';
 import { renderGames, renderTeams, statusLabel, formatLabel } from './features/games/view.js';
 import { GameSetup, TeamNames } from './features/games/setup.js';
 import { DraftController } from './features/teams/controller.js';
@@ -6,6 +7,7 @@ import { KnockoutController } from './features/knockout/controller.js';
 import { knockoutChampion } from './domain/knockout.js';
 import { createAdminForms } from './features/admin/forms.js';
 import { activeGame, gameScreen } from './domain/game-flow.js';
+import { applyScoreTransition } from './domain/score-reveal.js';
 import { createApi } from './lib/api.js';
 import { createDialog } from './lib/dialog.js';
 import { createPageForm } from './lib/page-form.js';
@@ -43,6 +45,8 @@ export function mountApp(root, { config, supabase }) {
   let setup;
   let names;
   let resultPage;
+  let scoreReveal;
+  let disposed = false;
   let stale = false;
   let commandBusy = false;
   let fetchId = 0;
@@ -72,11 +76,27 @@ export function mountApp(root, { config, supabase }) {
     history.replaceState(null, '', `${location.pathname}${location.search}${hash}`);
   }
   function selectGame(id, step = '') {
-    if (route.id !== id || route.step !== step || route.newGame) resetWorkspace();
+    if (route.id !== id || route.step !== step || route.newGame) { scoreReveal?.close({ restoreFocus: false }); resetWorkspace(); }
     route = { id, step, newGame: false }; writeRoute();
   }
-  function selectSession(id) { selectedSession = id; }
+  function selectSession(id) { scoreReveal?.close({ restoreFocus: false }); selectedSession = id; }
   function focusPage() { $('#main').focus({ preventScroll: true }); window.scrollTo({ top: 0, behavior: 'instant' }); }
+  function resultSaved(transition) {
+    if (disposed || !board?.is_admin || board.session.id !== transition.sessionId) return;
+    // Update only a board that is still the acknowledged baseline. A newer
+    // realtime read must never be overwritten with this older transition.
+    const confirmed = applyScoreTransition(board, transition);
+    if (confirmed !== board) {
+      board = confirmed;
+      stale = true; // Obtain a fresh server revision before another edit.
+    }
+    selectGame(null); render(); focusPage(); notify('Result saved.');
+    try { scoreReveal.open(transition); }
+    catch { scoreReveal.close({ restoreFocus: false }); notify('Result saved. The leaderboard changes could not be shown.', true); }
+    // A read failure is reported by refresh without turning the confirmed save
+    // back into an editable failed submission or delaying its presentation.
+    void refresh();
+  }
   function renderProgress(format, screen) {
     const steps = format === 'ffa' ? ['players'] : format === 'knockout' ? ['players', 'draw'] : ['players', 'draw', 'names'];
     const index = steps.indexOf(screen);
@@ -134,7 +154,10 @@ export function mountApp(root, { config, supabase }) {
       else names.update(canSetup);
       if (changed) content.insertAdjacentHTML('afterbegin', '<button class="text-button back-to-draw" data-action="back-to-draw">← Team assignment</button>');
     } else if (screen === 'results') {
-      if (!resultPage) { resultPage = createPageForm(content, { canSubmit: mutable }); forms.result(game, resultPage); }
+      if (!resultPage) {
+        const page = resultPage = createPageForm(content, { canSubmit: mutable });
+        forms.result(game, page, (transition) => { if (resultPage === page) resultSaved(transition); });
+      }
       else resultPage.update();
     } else {
       if (changed) content.innerHTML = '<div id="team-rosters" class="team-grid game-rosters"></div><div id="game-actions" class="flow-actions"></div>';
@@ -171,6 +194,7 @@ export function mountApp(root, { config, supabase }) {
       if (!next) throw new Error('No LAN session found. Apply the database migrations.');
       if (board?.is_admin && !next.is_admin) clearPrivateView();
       board = next; stale = false;
+      scoreReveal?.sync(board.session.id, board.is_admin);
       if (route.id && !currentGame()) selectGame(null);
       connection(navigator.onLine ? '' : 'Offline — showing the last loaded standings.'); render();
     } catch (error) {
@@ -188,6 +212,7 @@ export function mountApp(root, { config, supabase }) {
     return request.then(async () => { let observed = id; while (observed !== fetchId) { observed = fetchId; await latestFetch; } });
   }
   function clearPrivateView() {
+    scoreReveal?.close({ restoreFocus: false });
     fetchId += 1; resetWorkspace(); board = null; selectedSession = null; selectGame(null); dialog.clear();
     $('.admin-menu').hidden = true; $('.admin-menu').open = false;
     $('#session-select').replaceChildren(); $('[data-action=login]').hidden = false; $('[data-action=start-new-game]').hidden = true;
@@ -201,7 +226,8 @@ export function mountApp(root, { config, supabase }) {
     $('[data-action=login]').disabled = true; $('[data-action=refresh]').disabled = true;
     return () => {};
   }
-  const forms = createAdminForms({ dialog, api, client: supabase, config, getBoard: () => board, refresh, notify, selectGame, selectSession });
+  scoreReveal = new ScoreReveal({ api, onClosed: focusPage });
+  const forms = createAdminForms({ dialog, api, client: supabase, config, getBoard: () => board, refresh, notify, selectGame, selectSession, onResultSaved: resultSaved });
   const onClick = async (event) => {
     const button = event.target.closest('[data-action]');
     if (!button || button.disabled) return;
@@ -243,7 +269,7 @@ export function mountApp(root, { config, supabase }) {
   const onOffline = () => { stale = true; draw?.stop(); knockout?.stop(); connection('Offline — reconnect before editing.'); render(); };
   const onOnline = () => void refresh();
   const onVisibility = () => { if (document.hidden) { draw?.stop(); knockout?.stop(); } else void refresh(); };
-  const onHashChange = () => { if (workspaceBusy()) { writeRoute(); return; } resetWorkspace(); route = readRoute(); render(); };
+  const onHashChange = () => { if (workspaceBusy()) { writeRoute(); return; } scoreReveal.close({ restoreFocus: false }); resetWorkspace(); route = readRoute(); render(); };
   window.addEventListener('offline', onOffline); window.addEventListener('online', onOnline); window.addEventListener('hashchange', onHashChange); document.addEventListener('visibilitychange', onVisibility);
   const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
     if (event === 'SIGNED_OUT') clearPrivateView();
@@ -255,6 +281,7 @@ export function mountApp(root, { config, supabase }) {
   const poll = setInterval(() => { if (!document.hidden) void refresh(); }, 15000);
   void refresh();
   return () => {
+    disposed = true; scoreReveal.dispose();
     fetchId += 1; resetWorkspace(); clearInterval(poll); clearTimeout(refreshTimer); clearTimeout(messageTimer); dialog.clear();
     authListener.subscription.unsubscribe(); void supabase.removeChannel(liveChannel); root.removeEventListener('click', onClick);
     window.removeEventListener('offline', onOffline); window.removeEventListener('online', onOnline); window.removeEventListener('hashchange', onHashChange); document.removeEventListener('visibilitychange', onVisibility);

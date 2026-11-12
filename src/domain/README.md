@@ -4,6 +4,10 @@
 
 The ignored mockup is a reference, not a dependency of the production application.
 
+`score-reveal.js` captures an immutable board/game baseline and derives the acknowledged result's before/after rankings with the existing allocation, correction, and dense-tie rules. Its rows include every leaderboard player, net point differences, rank differences, and separate visual list indices. Corrections replace the previous game award. Later board updates are never used as the after-state for an earlier result; presentation code animates these snapshots without modifying points.
+
+An acknowledged result can also carry an optional MVP identity into the cached completed game while the next authoritative board read is pending. MVP selection does not change award calculations or rankings.
+
 `game-flow.js` resolves lifecycle screens, detects setup changes that require a confirmed redraw, and validates team names. Starting and naming games is also validated transactionally in the database.
 
 `picker.js` calculates stable avatar slots, rotation endpoints, artwork clearance, and car travel for 2–64 participants. These are presentation calculations: they never choose the next player or destination team.

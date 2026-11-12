@@ -88,5 +88,12 @@ test('bracket refresh and winner choice preserve portrait sections, scroll and f
     KnockoutView.prototype.update.call(view, data, state);
     assert.equal(sections['.ko-selected'].writes, 2);
     assert.equal(sections['.ko-bracket-scroll'].writes, 2);
+    data.status = 'completed'; data.mvp_player_id = 'b';
+    KnockoutView.prototype.update.call(view, data, state);
+    assert.match(sections['.ko-results'].innerHTML, /aria-label="Game MVP"[\s\S]*?<strong>Bob<\/strong>/);
+    assert.equal(sections['.ko-results'].hidden, false);
+    data.mvp_player_id = null;
+    KnockoutView.prototype.update.call(view, data, state);
+    assert.doesNotMatch(sections['.ko-results'].innerHTML, /game-mvp/);
   } finally { globalThis.document = oldDocument; }
 });

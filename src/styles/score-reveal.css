@@ -1,0 +1,52 @@
+.score-reveal-modal { width:min(800px,calc(100% - 28px)); max-height:calc(100dvh - 28px); border:1px solid #71825c; padding:26px; color:var(--color-text); background:var(--color-background); border-radius:0; overflow:hidden; }
+.score-reveal-modal[open] { display:flex; flex-direction:column; }
+.score-reveal-modal::backdrop { background:#0b120de6; backdrop-filter:blur(3px); }
+.score-reveal-modal>header,.score-reveal-modal>footer { flex-shrink:0; }
+.score-reveal-modal h2 { margin:6px 0 24px; font-size:29px; }
+.score-reveal-modal header p { margin:0; color:var(--color-muted); font-size:13px; overflow-wrap:anywhere; }
+.score-reveal-scroll { min-height:0; overflow:auto; padding:2px; }
+.score-reveal-head,.score-reveal-row { display:grid; grid-template-columns:32px minmax(0,1fr) minmax(86px,.65fr) minmax(70px,.55fr) 84px; gap:12px; align-items:center; }
+.score-reveal-head { color:var(--color-muted); font-size:11px; padding:0 12px 12px; }
+.score-reveal-head>:nth-child(n+3) { text-align:right; }
+.score-reveal-list { position:relative; list-style:none; padding:0; margin:0; display:grid; gap:6px; }
+.score-reveal-list[data-positioned]>.score-reveal-row { position:absolute; top:0; left:0; right:0; }
+.score-reveal-row { min-height:74px; padding:12px; background:var(--color-surface); border-left:2px solid transparent; }
+.score-reveal-list.is-moving>.score-reveal-row { will-change:transform; }
+.score-reveal-list:is(.is-moving,.is-settled)>.score-reveal-row[data-direction=up] { border-left-color:var(--color-accent); background:#293522; z-index:2; }
+.score-reveal-list:is(.is-moving,.is-settled)>.score-reveal-row[data-direction=down] { border-left-color:#eea28b; z-index:1; }
+.score-reveal-rank { font:22px var(--font-mono); color:var(--color-muted); }
+.score-reveal-identity { min-width:0; display:flex; align-items:center; gap:11px; }
+.score-reveal-identity strong { min-width:0; overflow-wrap:anywhere; font-size:17px; }
+.score-reveal-points,.score-reveal-total,.score-reveal-change { text-align:right; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.score-reveal-points { font:13px var(--font-mono); color:var(--color-accent); }
+.score-reveal-points.negative { color:#eea28b; }
+.score-reveal-points.unchanged { color:var(--color-muted); }
+.score-reveal-total { font:700 23px var(--font-mono); }
+.score-reveal-change { color:var(--color-muted); font:16px var(--font-mono); }
+.score-reveal-row[data-direction=up] .score-reveal-change { color:var(--color-accent); }
+.score-reveal-row[data-direction=down] .score-reveal-change { color:#eea28b; }
+.score-reveal-change small { display:block; color:var(--color-muted); font:11px Arial,sans-serif; margin-top:3px; }
+.score-reveal-modal>footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:14px; border-top:1px solid var(--color-border); margin-top:20px; padding-top:18px; }
+.score-reveal-modal footer .primary { min-width:100px; }
+.result-entry-roster { list-style:none; padding:0; margin:0 0 12px; display:flex; flex-wrap:wrap; gap:10px 22px; }
+.result-entry-roster li { display:flex; align-items:center; gap:9px; min-width:0; }
+.result-entry-roster strong { overflow-wrap:anywhere; }
+.result-team legend .small-portrait { display:inline-flex; vertical-align:middle; margin-right:10px; }
+@media(max-width:600px) {
+  .score-reveal-modal { padding:20px 12px; }
+  .score-reveal-modal h2 { font-size:24px; margin-bottom:20px; }
+  .score-reveal-head,.score-reveal-row { grid-template-columns:22px minmax(0,1fr) minmax(48px,.6fr) minmax(46px,.5fr) 56px; gap:6px; }
+  .score-reveal-head { padding:0 7px 10px; font-size:10px; }
+  .score-reveal-row { min-height:62px; padding:10px 7px; }
+  .score-reveal-identity { gap:6px; }
+  .score-reveal-identity .small-portrait { width:24px; height:31px; }
+  .score-reveal-identity strong { font-size:13px; }
+  .score-reveal-rank { font-size:17px; }
+  .score-reveal-points { font-size:11px; }
+  .score-reveal-total { font-size:19px; }
+  .score-reveal-change { font-size:13px; }
+  .score-reveal-change small { font-size:10px; }
+  .score-reveal-modal>footer { gap:10px; }
+  .score-reveal-modal footer .primary { min-width:70px; }
+}
+@media(max-width:380px) { .score-reveal-identity .small-portrait { display:none; } }

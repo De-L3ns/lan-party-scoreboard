@@ -41,7 +41,11 @@ export class PickerView {
     this.$('.sound-button').onclick = sound;
     this.root.querySelectorAll('[data-picker-mode]').forEach((button) => { button.onclick = () => mode(button.dataset.pickerMode); });
   }
-  reduced() { return globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  setFullMotion(enabled) {
+    this.fullMotion = Boolean(enabled);
+    this.root.dataset.fullMotion = String(this.fullMotion);
+  }
+  reduced() { return !this.fullMotion && globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches; }
   get remainingDuration() { return Math.max(.1, ((this.spinDuration || 4200) - (performance.now() - (this.spinStart || 0))) / 1000); }
   update(game) {
     this.game = game; this.setMode(game.picker_mode || 'rifle');

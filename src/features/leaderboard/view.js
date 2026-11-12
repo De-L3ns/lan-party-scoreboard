@@ -11,12 +11,17 @@ export function renderLeaderboard(root, players, api) {
     <span class="player-rank">${player.rank}</span>${imageMarkup(api.imageUrl(player.image_path), player.name)}
     <div class="player-details"><h3>${h(player.name)}</h3>${player.titles.map((title) => `<span class="player-title">${h(title)}</span>`).join('')}${player.archived ? '<small class="muted">Archived player</small>' : ''}</div>
     <strong class="player-points">${formatPoints(player.points)}<small>points</small></strong></article>`;
-  const podium = (player, index) => `<article class="podium-player podium-place-${index + 1} medal-${player.rank}" aria-label="${h(player.name)}, rank ${player.rank}, ${formatPoints(player.points)} points">
-    <div class="podium-profile">${imageMarkup(api.imageUrl(player.image_path), player.name)}
+  const profile = (player) => `<article class="podium-profile" aria-label="${h(player.name)}, rank ${player.rank}, ${formatPoints(player.points)} points">${imageMarkup(api.imageUrl(player.image_path), player.name)}
       <div class="player-details"><h3>${h(player.name)}</h3>${player.titles.map((title) => `<span class="player-title">${h(title)}</span>`).join('')}${player.archived ? '<small class="muted">Archived player</small>' : ''}</div>
-    </div>
-    <div class="podium-step"><span class="podium-medal"><span class="podium-rank">${player.rank}</span></span>
-      <strong class="player-points">${formatPoints(player.points)}<small>points</small></strong></div>
-  </article>`;
-  if (setHtml(root, `<div class="podium" aria-label="Top three players">${ranked.slice(0, 3).map(podium).join('')}</div><div class="player-list">${ranked.slice(3).map(card).join('')}</div>`)) installImageFallbacks(root);
+    </article>`;
+  const groups = [1, 2, 3].map((rank) => ranked.filter((player) => player.rank === rank)).filter((group) => group.length);
+  const podium = (group) => {
+    const first = group[0], shared = group.length > 1;
+    return `<section class="podium-player podium-place-${first.rank} medal-${first.rank}${shared ? ' shared-podium' : ''}" aria-label="${shared ? 'Shared ' : ''}place ${first.rank}">
+      <div class="podium-profiles">${group.map(profile).join('')}</div>
+      <div class="podium-step"><span class="podium-medal"><span class="podium-rank">${first.rank}</span></span>${shared ? `<span class="podium-shared">Shared by ${group.length} players</span>` : ''}
+        <strong class="player-points">${formatPoints(first.points)}<small>${shared ? 'points each' : 'points'}</small></strong></div>
+    </section>`;
+  };
+  if (setHtml(root, `<div class="podium" data-places="${groups.length}" aria-label="Top three places">${groups.map(podium).join('')}</div><div class="player-list">${ranked.filter((player) => player.rank > 3).map(card).join('')}</div>`)) installImageFallbacks(root);
 }

@@ -12,6 +12,7 @@ function fixture(count = 2) {
     teams: [{ id: 'a', position: 0, name: 'Team A', members: [] }, { id: 'b', position: 1, name: 'Team B', members: [] }] };
   const view = {
     bind(handlers) { this.handlers = handlers; }, audio() {}, reduced: () => false,
+    setFullMotion(value) { this.fullMotion = value; events.push(['full-motion', value]); },
     update(game) { events.push(['view', game.pick_count]); },
     controls(state) { this.state = state; root.hidden = state.complete && !state.busy; },
     complete() { events.push(['complete']); }, pending() { events.push(['pending']); },
@@ -57,7 +58,7 @@ function fixture(count = 2) {
     }
     throw Error('Unexpected operation');
   } };
-  controller = new DraftController(root, { api, refresh, notify: (...args) => notices.push(args), view, audio, isHidden: () => hidden, pause: async (_, signal) => checkSignal(signal) });
+  controller = new DraftController(root, { api, refresh, notify: (...args) => notices.push(args), view, audio, isHidden: () => hidden, pause: async (ms, signal) => { events.push(['pause', ms]); checkSignal(signal); } });
   controller.update(snapshot(), true);
   return { controller, view, audio, root, calls, events, notices, refresh, snapshot, get server() { return server; },
     setHidden(value) { hidden = value; }, setPermission(value) { permission = value; }, failNextCommit() { failCommit = true; },
@@ -89,6 +90,23 @@ test('TrackMania aligns and drives into the reserved player; only a successful c
   assert.ok(names.indexOf('drive') < names.indexOf('committed'));
   assert.ok(names.indexOf('committed') < names.indexOf('impact'));
   assert.deepEqual(f.events.find(([name]) => name === 'impact-sound'), ['impact-sound', 'trackmania']);
+  f.controller.dispose();
+});
+
+test('organizer spins keep full timing under reduced motion and clear the override afterward', async () => {
+  const f = fixture();
+  f.view.reduced = () => !f.view.fullMotion;
+  let release;
+  f.view.aim = async (_, { signal, duration }) => {
+    assert.equal(f.view.fullMotion, true); assert.equal(f.view.reduced(), false);
+    assert.equal(duration, undefined, 'Organizer uses the normal 4.2 second default');
+    await new Promise(resolve => { release = resolve; }); checkSignal(signal);
+  };
+  const pending = f.controller.spin(); await flush();
+  assert.equal(f.view.fullMotion, true); assert.ok(f.events.some(([name]) => name === 'spin-sound'));
+  release(); await pending;
+  assert.ok(f.events.some(([name, ms]) => name === 'pause' && ms === 320));
+  assert.equal(f.view.fullMotion, false); assert.equal(f.view.reduced(), true);
   f.controller.dispose();
 });
 

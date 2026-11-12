@@ -30,6 +30,16 @@ Use `.env.local` for local public settings, starting from `.env.example`. Only v
 
 ## Runtime and data flow
 
+### Shared podium and game MVP activation
+
+The leaderboard groups every player at ranks 1, 2, and 3 on that rank's podium step, retaining consecutive tied ranks. This part requires only the frontend build. Optional MVP selection is available in all game-result forms and is highlighted in completed reports using the saved participant profile, without awarding additional points. Corrections can change or clear the MVP.
+
+Apply `supabase/migrations/202611120001_game_mvp.sql` after the five earlier migrations to enable MVP persistence, then refresh the app. It adds the nullable participant reference and saves it in the existing result transaction. The coding agent has not applied this migration remotely or run its rollback-only database acceptance script, `supabase/tests/006_game_mvp.sql`. Before migration, selecting an MVP blocks the save with an explanatory error; result entry without an MVP continues to work. See [database setup](../supabase/README.md) for activation and manual checks.
+
+### Score entry and leaderboard reveal activation
+
+Feature [005 — Score entry and leaderboard reveal](specs/005-score-reveal.md) is a frontend change using the existing authorized `save_result` RPC and revision/deduplication contract. No new SQL migration or persisted animation events are required. Build/deploy the application with Node 24 and the existing workflow. The result-entry baseline is captured before saving; a confirmed save opens a browser-local popup with static final totals and animated player positions. Other devices retain normal live updates. Automated checks cover direct saves, correction deltas, team allocations, tied ranks, immutable comparisons, intermediate row positions, replay, always-on movement, and cleanup. Browser/projector acceptance scenarios remain manual and have not been performed by this implementation.
+
 ### Knockout tournament activation
 
 Knockout source is included with spec 004. Apply `supabase/migrations/202611110001_knockout_tournament.sql` after the four existing migrations, then rebuild/deploy using Node 24 and the existing Pages workflow. See [database setup](../supabase/README.md) for migration order, the added RPCs, and the rollback-only acceptance script. The coding agent has not applied the migration to the hosted database or performed browser/database acceptance checks. The standalone HTML mockup remains independent of the app.

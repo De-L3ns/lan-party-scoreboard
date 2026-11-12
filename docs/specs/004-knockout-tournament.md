@@ -6,6 +6,8 @@ The approved fundamentals and visual reference are in `mockup/knockout-tournamen
 
 This feature adds a third game format to [002 — Guided game flow](002-guided-game-flow.md), alongside free-for-all and team games. [001 — MVP leaderboard](001-mvp-leaderboard.md) continues to define scoring, player profiles, authorization, archives, and persistence. [003 — Themed player picker](003-themed-player-picker.md) continues to apply to team assignment; its rifle/car picker is not used for knockout tournaments.
 
+[005 — Score entry and leaderboard reveal](005-score-reveal.md) replaces the final **Preview awards → Save results** interaction below. It preserves bracket-derived places and per-rank awards while adding a post-save leaderboard-change popup. Application source is implemented; browser/projector checks are pending.
+
 ## 1. Purpose
 
 Run a single-elimination tournament between the selected players. Each played match is 1v1: the winner advances, the loser is out, and the final winner becomes champion. Make the draw and each newly confirmed matchup a shared moment through a focused, Tekken-inspired **versus** reveal showing both players' pictures, names, and profile tags.

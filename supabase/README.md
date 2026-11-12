@@ -1,11 +1,11 @@
 # Supabase MVP setup
 
-Apply migrations in order: `migrations/202611080001_mvp.sql`, `migrations/202611090001_game_formats.sql`, `migrations/202611090002_guided_game_flow.sql`, `migrations/202611100001_themed_picker.sql`, then `migrations/202611110001_knockout_tournament.sql`. The first creates the application tables, public read policies, admin-checked transactional functions, a private draft/request schema, the `player-images` bucket configuration, and an initial active LAN. The second adds free-for-all games; existing games remain team-based. The third adds the guided setup/start flow and required team names. The fourth saves the picker theme and authorizes changes between picks. The fifth adds knockout tournaments, private seed layouts/reveal reservations, published matches/events, audited winner/undo operations, and bracket-validated individual awards.
+Apply migrations in order: `migrations/202611080001_mvp.sql`, `migrations/202611090001_game_formats.sql`, `migrations/202611090002_guided_game_flow.sql`, `migrations/202611100001_themed_picker.sql`, `migrations/202611110001_knockout_tournament.sql`, then `migrations/202611120001_game_mvp.sql`. The first creates the application tables, public read policies, admin-checked transactional functions, a private draft/request schema, the `player-images` bucket configuration, and an initial active LAN. The second adds free-for-all games; existing games remain team-based. The third adds the guided setup/start flow and required team names. The fourth saves the picker theme and authorizes changes between picks. The fifth adds knockout tournaments, private seed layouts/reveal reservations, published matches/events, audited winner/undo operations, and bracket-validated individual awards. The sixth adds an optional saved MVP from the game's participants, without extra points.
 
 ## Apply to your project
 
 1. Open your project in the Supabase Dashboard and open **SQL Editor**.
-2. Run each unapplied migration **once**, as the database owner, in the order above. If the first four migrations are already installed, run only `migrations/202611110001_knockout_tournament.sql`; otherwise apply all remaining migrations in order. Do not rerun installed migrations. Each migration uses one transaction: a failure rolls the whole change back. If an error occurs, stop and resolve it rather than running fragments independently.
+2. Run each unapplied migration **once**, as the database owner, in the order above. If the first five migrations are already installed, run only `migrations/202611120001_game_mvp.sql`; otherwise apply all remaining migrations in order. Do not rerun installed migrations. Each migration uses one transaction: a failure rolls the whole change back. If an error occurs, stop and resolve it rather than running fragments independently.
 3. In **Authentication → Users**, find the organizer account already created during project setup. Enroll it through SQL Editor:
 
    ```sql
@@ -49,6 +49,8 @@ All mutations take `p_input` (JSON) and `p_request_id` (UUID). The client retain
 
 Each state-changing request locks the active LAN before changing its game or score rows. Result corrections preserve earlier ledger events. Totals are derived from the ledger, not directly editable totals.
 
+`save_result` also accepts optional `mvp_player_id`: a UUID from the game's saved participants, or JSON null/empty to clear it. An omitted field preserves an existing MVP for older clients. The selection is saved atomically with the results and included in the audited input; all existing authorization, lifecycle, correction reason, revision, and retry rules apply. `games.mvp_player_id` has a composite foreign key to that game's participant snapshot and can be non-null only for a completed game. `read_board` and the JSON report export include the field automatically. It contributes no leaderboard points.
+
 Free-for-all games reuse the result and correction pipeline by storing each participant as a single-member result entry in `teams`. The UI presents individual players. Knockout also uses single-member award entries (up to 64), with bracket matches stored separately. `read_board` includes published `knockout_matches`, `knockout_events` with string event IDs, and admin-only `knockout_last_result`/`knockout_history`. Seed layout and pending reservations are never exposed through the board or public tables. All match commands check `tournament_revision`; point awards still use result/board revisions too. `read_board` includes `games.format` automatically; free-for-all setup creates no private wheel sequence. Team-count validation remains capped at eight for team-based games.
 
 ## Manual acceptance checklist
@@ -65,6 +67,8 @@ No local database test harness is installed. The migration has not been executed
 - Create a free-for-all game and select participants. **Start game** must return directly to the scoreboard without a draft or team naming; verify further participant changes are rejected. Enter separate results and points for each player; preview, save, and correct an award. Test lower-is-better times and more than eight participants. Confirm existing team games still use their draft and award rules.
 - Leave result entry without saving: the game stays active and scores do not change. Save after previewing: the tile disappears and another game can start. Competing starts from two admin tabs must allow only one active game.
 - Correct an awarded result with a reason. Verify that it replaces the earlier contribution and leaves an audit record. A stale second result form should be rejected and require reopening.
+- In each game format, save results with no MVP, then select a participant as MVP during a reasoned correction. Verify the report's portrait/name/titles, refresh persistence, unchanged point totals, and changing/clearing the selection. The current roster may change afterward; the report must retain the saved game profile. A direct request selecting someone outside the game must fail without changing points.
+- Give several players equal totals at each top-three rank. Everyone at a shared rank must appear on one podium step, exactly once; the remaining list begins at rank 4. Check a fully tied roster and mobile layout.
 - Add a negative individual adjustment, then reverse it from Score history. Check that the original event remains and cannot be reversed twice.
 - Change a player's name/artwork after a game. The leaderboard can update, but that game's roster must retain its snapshot.
 - Export a report, then archive/reset the disposable LAN. The new session should have zero scores and retained players; only the admin may select the old session. A direct anonymous `read_board` request for that archive must fail.
@@ -77,6 +81,10 @@ The new SQL migration and the rollback-only acceptance script have been syntax-c
 Use [spec 004 acceptance scenarios](../docs/specs/004-knockout-tournament.md#11-acceptance-scenarios) for the remaining manual checks, particularly cross-device reveals, competing admin tabs, private archives, long tags, projector/mobile layout, and keyboard/reduced-motion behavior.
 
 The JSON report export is for inspection and audit, not a complete recovery backup. Use Supabase database exports and a separate copy of Storage files before material maintenance.
+
+### Game MVP database verification
+
+The game MVP migration and `tests/006_game_mvp.sql` have not been executed against a database by the coding agent. After applying all six migrations, run that script as database owner in a disposable project with an enrolled organizer and an active `TEST - ...` LAN with no active game. It verifies optional selection, participant validation, non-admin/stale/unreasoned correction rejection, retry deduplication, audited selection/change/clear operations, omitted-field compatibility, board visibility, and no additional point awards. Success ends in `ROLLBACK` and retains no test data. Complete the UI checks above for all formats, saved identities, and shared podium layout.
 
 ## Operational notes
 

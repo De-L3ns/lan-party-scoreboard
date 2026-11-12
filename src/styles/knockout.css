@@ -67,15 +67,12 @@
 .ko-results th:last-child,.ko-results td:last-child { text-align:right; }
 .ko-rank-award-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(180px,240px); gap:24px; align-items:start; }
 .ko-rank-count { color:var(--color-muted); font-size:12px; font-weight:400; }
-.ko-rank-players,.ko-rank-preview-players { list-style:none; margin:0; padding:0; }
+.ko-rank-players { list-style:none; margin:0; padding:0; }
 .ko-rank-players { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr)); gap:12px; }
 .ko-rank-players li { display:flex; align-items:center; gap:10px; min-width:0; }
 .ko-rank-players strong { font-size:15px; overflow-wrap:anywhere; }
-.ko-rank-players small,.ko-rank-preview-players small { display:block; color:var(--color-muted); font-size:11px; }
+.ko-rank-players small { display:block; color:var(--color-muted); font-size:11px; }
 .ko-rank-award-layout label { margin-top:0; }
-.ko-rank-preview-players { text-align:left; }
-.ko-rank-preview-players li+li { margin-top:10px; }
-.ko-rank-preview-players strong { font-weight:400; overflow-wrap:anywhere; }
 .ko-rank-award .form-help { margin-bottom:0; }
 @media(max-width:650px) { .ko-rank-award-layout { grid-template-columns:1fr; gap:18px; } }
 .ko-versus-modal { width:min(960px,calc(100% - 28px)); max-height:calc(100dvh - 28px); overflow:auto; border:1px solid #71825c; border-radius:0; background:var(--color-background); color:var(--color-text); padding:32px; text-align:center; }

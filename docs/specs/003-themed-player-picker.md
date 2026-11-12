@@ -106,7 +106,8 @@ The showcase chooses players locally for demonstration. Production must continue
 - Expand the completed team rosters and offer **Name the teams**, continuing feature 002. Do not automatically advance, leave a single-player reveal box, or keep a completed spinner consuming half the screen.
 - Returning from team naming preserves the assignments and completed overview.
 - Free-for-all continues to skip team assignment entirely; this feature does not introduce a draft into its start flow.
-- Respect reduced-motion preferences: skip or substantially shorten rotation, suppress muzzle flashes, recoil, splatter bursts, collision movement, and avatar shaking. Preserve the exact reserved player, team order, and confirmation rules.
+- As explicitly requested, an organizer starting **Spin & fire**, **Spin & race**, or **Auto draw** opts into the full picker presentation: the normal 4.2-second rotation, lock-on pause, drive where applicable, and impact effects must not be skipped by a system reduced-motion preference. Scope this override to that active organizer pick and clear it on completion, cancellation, or disposal.
+- Passive viewer presentations continue to respect reduced-motion preferences: skip or substantially shorten rotation and suppress muzzle flashes, recoil, splatter bursts, collision movement, and avatar shaking. Preserve the exact reserved player, team order, and confirmation rules.
 - Spinning audio may be omitted when rotation is skipped. Final sounds still follow the local sound preference; reduced motion is not an instruction to force sound on or off.
 - Keep keyboard-operable controls, visible focus, accessible mode states, readable name fallbacks, and one concise live announcement per committed assignment. Do not announce every frame or tracking reticle change.
 - Recalculate layout when resized or entering fullscreen. Rotation must still align with the correct avatar and the car's travel distance must reach that same player.

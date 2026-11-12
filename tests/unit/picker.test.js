@@ -121,3 +121,32 @@ test('cancelled pauses cannot resume the following animation phase', async () =>
   const control = new AbortController(); const pause = wait(1000, control.signal); control.abort();
   await assert.rejects(pause, { name: 'AbortError' });
 });
+
+test('explicit organizer motion runs the real spin and drive despite a reduced-motion preference', async () => {
+  const keys = ['matchMedia', 'requestAnimationFrame', 'cancelAnimationFrame'];
+  const descriptors = keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]);
+  try {
+    Object.defineProperty(globalThis, 'matchMedia', { configurable:true, value:()=>({ matches:true }) });
+    Object.defineProperty(globalThis, 'requestAnimationFrame', { configurable:true, value:()=>1 });
+    Object.defineProperty(globalThis, 'cancelAnimationFrame', { configurable:true, value:()=>{} });
+    const animations=[];
+    const element=()=>({style:{},animate(frames,options){let finish;const finished=new Promise(resolve=>{finish=resolve;});animations.push({frames,options,finish});return{finished,cancel(){}};}});
+    const rotor=element(),car=element(),arena={style:{setProperty(){}},classList:{add(){}}};
+    const target={classList:{add(){},toggle(){}}};
+    const view=Object.create(PickerView.prototype);
+    Object.assign(view,{root:{dataset:{}},angle:-90,mode:'rifle',membership:new Map(),nodes:new Map([['p',target]]),
+      layout:{slots:[{id:'p',angle:0,driveDistance:150}]},stopGeneric(){},measure(){},clearTargets(){},phase(){},
+      $:selector=>({'.rotor':rotor,'.car-motion':car,'.arena':arena})[selector]});
+    assert.equal(view.reduced(),true);
+    view.setFullMotion(true);assert.equal(view.reduced(),false);assert.equal(view.root.dataset.fullMotion,'true');
+    const spin=view.aim('p');
+    assert.equal(animations.length,1);assert.equal(animations[0].options.duration,4200);assert.equal(view.spinning,true);
+    animations[0].finish();await spin;assert.equal(view.spinning,false);assert.match(rotor.style.transform,/rotate/);
+    const drive=view.drive('p');assert.equal(animations[1].options.duration,680);
+    animations[1].finish();await drive;assert.equal(car.style.transform,'translateX(150px)');
+    view.setFullMotion(false);assert.equal(view.reduced(),true);
+    await view.aim('p');assert.equal(animations.length,2,'Passive reduced-motion presentations still skip the spin');
+  } finally {
+    for(const [key,descriptor] of descriptors){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];}
+  }
+});

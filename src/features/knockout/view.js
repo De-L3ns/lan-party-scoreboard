@@ -1,5 +1,6 @@
 import { escapeHtml as h, imageMarkup, installImageFallbacks, formatPoints, setHtml } from '../../lib/html.js';
 import { knockoutMatches, knockoutRounds, knockoutChampion, knockoutPlaces, roundLabel, matchLabel } from '../../domain/knockout.js';
+import { gameMvpMarkup } from '../games/mvp.js';
 
 const stateLabel = (match) => ({ waiting: 'Waiting', ready: 'Ready', complete: 'Finished', bye: 'Advances' })[match.status];
 const advanceLabel = (game, match) => `Direct to ${roundLabel(match.round + 1, knockoutRounds(game).length).toLowerCase()}`;
@@ -104,7 +105,7 @@ export class KnockoutView {
     }
     const confirm = this.root.querySelector('[data-ko=confirm]');
     if (confirm) confirm.disabled = busy || !choice;
-    const report = patch('.ko-results', game.status === 'completed' ? `<h2>Final standings</h2><table><thead><tr><th>Place</th><th>Player</th><th>Points</th></tr></thead><tbody>${[...game.participants].sort((a, b) => places.get(a.player_id) - places.get(b.player_id) || a.name.localeCompare(b.name)).map((row) => `<tr><td>${places.get(row.player_id)}</td><td>${h(row.name)}</td><td>${formatPoints(game.awards?.find((award) => award.player_id === row.player_id)?.points ?? 0)}</td></tr>`).join('')}</tbody></table>` : '');
+    const report = patch('.ko-results', game.status === 'completed' ? `${gameMvpMarkup(game, this.api)}<h2>Final standings</h2><table><thead><tr><th>Place</th><th>Player</th><th>Points</th></tr></thead><tbody>${[...game.participants].sort((a, b) => places.get(a.player_id) - places.get(b.player_id) || a.name.localeCompare(b.name)).map((row) => `<tr><td>${places.get(row.player_id)}</td><td>${h(row.name)}</td><td>${formatPoints(game.awards?.find((award) => award.player_id === row.player_id)?.points ?? 0)}</td></tr>`).join('')}</tbody></table>` : '');
     report.hidden = game.status !== 'completed';
     patch('.ko-actions', `${playing && canWrite ? `<button class="button" data-ko="undo" ${busy || !game.knockout_last_result ? 'disabled' : ''}>Undo last result</button>` : ''}${setup && canSetup ? game.status === 'drafting' ? `<button class="button primary" data-ko="draw" ${busy ? 'disabled' : ''}>${game.rolling ? 'Resume reveal' : 'Continue draw'} →</button>` : `<button class="button primary" data-ko="start" ${busy ? 'disabled' : ''}>Start game</button>` : ''}${playing && canWrite ? `<button class="button primary" data-action="result" ${busy || !champion ? 'disabled' : ''}>End game</button>` : ''}${game.status === 'completed' && canWrite ? '<button class="button primary" data-action="result">Correct result</button>' : ''}<span class="ko-command-status" role="status">${busy ? 'Saving…' : ''}</span>`);
     if (position && scroll) { scroll.scrollLeft = position.left; scroll.scrollTop = position.top; }

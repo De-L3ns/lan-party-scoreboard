@@ -1,4 +1,5 @@
 import { escapeHtml as h, formatPoints, imageMarkup, installImageFallbacks, setHtml } from '../../lib/html.js';
+import { gameMvpMarkup } from './mvp.js';
 
 export const formatLabel = (game) => ({ ffa: 'Free-for-all', teams: 'Team-based', knockout: 'Knockout Tournament' })[game.format] || 'Team-based';
 export const statusLabel = (game) => ({ setup: 'Setup', drafting: 'Drafting', ready: game.format === 'knockout' ? 'Bracket ready' : game.format === 'ffa' ? 'Players ready' : 'Teams ready', playing: 'In progress', completed: 'Completed' }[game.status]);
@@ -26,13 +27,13 @@ export function renderTeams(root, game, api) {
   });
   root.classList.toggle('individual-results', game.format === 'ffa');
   if (game.format === 'ffa') {
-    const html = teams.map((team) => {
+    const html = gameMvpMarkup(game, api) + teams.map((team) => {
       const player = game.participants.find((row) => row.player_id === team.members[0]?.player_id);
       return `<article class="individual-result">${imageMarkup(api.imageUrl(player.image_path), player.name)}<div class="player-details"><h3>${h(player.name)}</h3><small class="muted">${h(player.titles.join(' · '))}</small></div>${team.result === null ? '' : `<strong class="individual-score">${formatPoints(team.result)}<small>result</small></strong>`}</article>`;
     }).join('');
     if (setHtml(root, html)) installImageFallbacks(root);
     return;
   }
-  const html = teams.map((team) => `<section class="team-card" style="--team-color:var(--team-${team.position % 4})"><header><h3>${h(team.name)}</h3>${team.result === null ? '' : `<strong>${formatPoints(team.result)}</strong>`}</header><ul>${rosterMarkup(game, team, api)}</ul></section>`).join('');
+  const html = gameMvpMarkup(game, api) + teams.map((team) => `<section class="team-card" style="--team-color:var(--team-${team.position % 4})"><header><h3>${h(team.name)}</h3>${team.result === null ? '' : `<strong>${formatPoints(team.result)}</strong>`}</header><ul>${rosterMarkup(game, team, api)}</ul></section>`).join('');
   if (setHtml(root, html)) installImageFallbacks(root);
 }

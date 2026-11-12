@@ -8,6 +8,8 @@ This specification replaces the game-starting and game-navigation flow in [001 �
 
 [003 — Themed player picker](003-themed-player-picker.md) specifies the approved replacement for the **Assign teams** wheel presentation, controls, effects, and sound. The guided flow and naming/completion behavior defined here remain in place.
 
+[005 — Score entry and leaderboard reveal](005-score-reveal.md) replaces the **Preview awards → Save results** interaction below with direct saving followed by a popup with animated rank changes. Application source is implemented; browser/projector checks are pending. The remaining guided flow stays in place.
+
 ## 1. Purpose
 
 Make starting and finishing a game easy for an admin operating the scoreboard on a projector while everyone watches. Each screen should make the players, current action, and next step clear without explanatory paragraphs.

@@ -91,8 +91,8 @@
 .themed-picker .phase-strip { top:calc(50% + 35px); }
 }
 @media(prefers-reduced-motion:reduce) {
-.themed-picker *, .themed-picker *::before, .themed-picker *::after { animation:none!important; transition:none!important; }
-.themed-picker .muzzle-flash, .themed-picker .tracer, .themed-picker .shell-case, .themed-picker .blood-impact, .themed-picker .crash-impact, .themed-picker .exhaust, .themed-picker .skid-trail { display:none; }
+.themed-picker:not([data-full-motion=true]) *, .themed-picker:not([data-full-motion=true]) *::before, .themed-picker:not([data-full-motion=true]) *::after { animation:none!important; transition:none!important; }
+.themed-picker:not([data-full-motion=true]) :is(.muzzle-flash, .tracer, .shell-case, .blood-impact, .crash-impact, .exhaust, .skid-trail) { display:none; }
 }
 
 .themed-picker .picker-tools { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px; }
