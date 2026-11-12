@@ -7,10 +7,15 @@ export function renderLeaderboard(root, players, api) {
     setHtml(root, '<p class="empty-state">No players yet. An admin can add the first players.</p>');
     return;
   }
-  const card = (player) => `<article class="player-card rank-${player.rank}" aria-label="${h(player.name)}, rank ${player.rank}, ${formatPoints(player.points)} points">
-    <span class="player-rank">${player.rank}</span>${imageMarkup(api.imageUrl(player.image_path), player.name)}
+  const allZero = ranked.every((player) => Number(player.points) === 0);
+  const card = (player) => `<article class="player-card${allZero ? '' : ` rank-${player.rank}`}" aria-label="${h(player.name)}, ${allZero ? 'not ranked yet' : `rank ${player.rank}`}, ${formatPoints(player.points)} points">
+    <span class="player-rank">${allZero ? '—' : player.rank}</span>${imageMarkup(api.imageUrl(player.image_path), player.name)}
     <div class="player-details"><h3>${h(player.name)}</h3>${player.titles.map((title) => `<span class="player-title">${h(title)}</span>`).join('')}${player.archived ? '<small class="muted">Archived player</small>' : ''}</div>
     <strong class="player-points">${formatPoints(player.points)}<small>points</small></strong></article>`;
+  if (allZero) {
+    if (setHtml(root, `<div class="player-list">${ranked.map(card).join('')}</div>`)) installImageFallbacks(root);
+    return;
+  }
   const profile = (player) => `<article class="podium-profile" aria-label="${h(player.name)}, rank ${player.rank}, ${formatPoints(player.points)} points">${imageMarkup(api.imageUrl(player.image_path), player.name)}
       <div class="player-details"><h3>${h(player.name)}</h3>${player.titles.map((title) => `<span class="player-title">${h(title)}</span>`).join('')}${player.archived ? '<small class="muted">Archived player</small>' : ''}</div>
     </article>`;

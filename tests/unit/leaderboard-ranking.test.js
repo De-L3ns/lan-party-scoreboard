@@ -31,8 +31,20 @@ test('everyone tied in the top three places shares their step; lower ranks remai
   for (let i = 0; i < 8; i++) assert.equal((html.match(new RegExp(`<h3>Player ${i}</h3>`, 'g')) || []).length, 1);
 });
 
-test('a fully tied 64-player board uses one shared first-place step without dropping anyone', () => {
-  const html = render(Array(64).fill(0));
+test('an all-zero roster has a regular list without podium places or rank-one labels', () => {
+  for (const count of [1, 2, 64]) {
+    const html = render(Array.from({ length: count }, (_, i) => i % 2 ? '0.00' : 0));
+    assert.doesNotMatch(html, /podium|Shared by|rank-1|, rank 1,/);
+    assert.equal((html.match(/class="player-card"/g) || []).length, count);
+    assert.equal((html.match(/not ranked yet/g) || []).length, count);
+    assert.equal((html.match(/class="player-rank">—/g) || []).length, count);
+    for (let i = 0; i < count; i++) assert.equal((html.match(new RegExp(`<h3>Player ${i}</h3>`, 'g')) || []).length, 1);
+  }
+  assert.match(render([10, 0, 0]), /podium-place-2[\s\S]*Shared by 2 players/);
+});
+
+test('a fully tied nonzero 64-player board uses one shared first-place step without dropping anyone', () => {
+  const html = render(Array(64).fill(10));
   assert.match(html, /data-places="1"/);
   assert.match(html, /Shared by 64 players/);
   assert.equal((html.match(/class="podium-profile"/g) || []).length, 64);

@@ -4,7 +4,7 @@ A LAN-party scoreboard for tracking individual points across free-for-all, team 
 
 ## Follow the action
 
-Open the scoreboard to see the live standings. Everyone ranked first, second, or third appears on that place's podium step, including all tied players. Everyone else stays in the player list. Equal points share a rank, with consecutive ranks after ties (1, 2, 3, 3, 4, 4). Select a game to view its participants, teams, draft progress, or results. No sign-in is needed to watch.
+Open the scoreboard to see the live standings. While everyone has zero points, the roster appears in a regular list without podium places. Once someone has a nonzero score, everyone ranked first, second, or third appears on that place's podium step, including all tied players. Everyone else stays in the player list. Equal points share a rank, with consecutive ranks after ties (1, 2, 3, 3, 4, 4). Select a game to view its participants, teams, draft progress, or results. No sign-in is needed to watch.
 
 ## Organize a LAN
 
