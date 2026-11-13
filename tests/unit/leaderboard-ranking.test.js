@@ -9,9 +9,9 @@ test('leaderboard ties use consecutive ranks across the podium and list', () => 
   assert.deepEqual(rankPlayers([]), []);
 });
 
-const render = (points) => {
+const render = (points, games = []) => {
   const root = { innerHTML: '', querySelectorAll: () => [] };
-  renderLeaderboard(root, points.map((score, i) => ({ id: String(i), name: `Player ${i}`, points: score, titles: [] })), { imageUrl: () => '' });
+  renderLeaderboard(root, points.map((score, i) => ({ id: String(i), name: `Player ${i}`, points: score, titles: [] })), { imageUrl: () => '' }, games);
   return root.innerHTML;
 };
 
@@ -52,4 +52,35 @@ test('a fully tied nonzero 64-player board uses one shared first-place step with
   assert.doesNotMatch(html, /class="player-card/);
   assert.match(render([2, 1]), /data-places="2"/);
   assert.match(render([]), /No players yet/);
+});
+
+test('podium and list players get one gold star per completed game MVP across formats', () => {
+  const games = [
+    { format: 'ffa', status: 'completed', mvp_player_id: '0' },
+    { format: 'teams', status: 'completed', mvp_player_id: '0' },
+    { format: 'knockout', status: 'completed', mvp_player_id: '1' },
+    ...Array.from({ length: 3 }, () => ({ status: 'completed', mvp_player_id: '4' })),
+    { status: 'playing', mvp_player_id: '0' },
+    { status: 'completed', mvp_player_id: null },
+    { status: 'completed' },
+    { status: 'completed', mvp_player_id: 'unknown' },
+  ];
+  const html = render([40, 40, 30, 20, 10], games);
+  const articles = [...html.matchAll(/<article\b[\s\S]*?<\/article>/g)].map(([article]) => article);
+  for (const [id, count] of [[0, 2], [1, 1], [2, 0], [3, 0], [4, 3]]) {
+    const article = articles.find(row => row.includes(`<h3>Player ${id}</h3>`));
+    assert.equal((article.match(/★/g) ?? []).length, count);
+    if (count) assert.match(article, new RegExp(`role="img" aria-label="${count} MVP ${count === 1 ? 'award' : 'awards'}"`));
+    else assert.doesNotMatch(article, /player-mvp-stars/);
+  }
+  assert.match(html, /Shared by 2 players/);
+  assert.match(articles.find(row => row.includes('<h3>Player 4</h3>')), /player-card rank-4/);
+  assert.equal((html.match(/★/g) ?? []).length, 6);
+});
+
+test('zero-point MVPs still show stars, and a LAN without saved MVPs shows none', () => {
+  const html = render([0, 0], [{ status: 'completed', mvp_player_id: '1' }]);
+  assert.match(html, /<h3>Player 1<\/h3><span class="player-mvp-stars"/);
+  assert.doesNotMatch(html, /podium/);
+  assert.doesNotMatch(render([0, 0]), /player-mvp-stars|★/);
 });

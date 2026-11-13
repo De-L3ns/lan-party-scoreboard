@@ -1,4 +1,4 @@
-# Lander & Fabn's LAN Party
+# LAN Party Scoreboard
 
 A LAN-party scoreboard for tracking individual points across free-for-all, team games, and 1v1 knockout tournaments.
 
@@ -31,6 +31,8 @@ Game results and leaderboard points are entered separately. For timed games, ent
 For team games, award the same points to each player, split a total pool, or assign custom points per player. Free-for-all games only require points for each participant; those points are also saved as the game result.
 
 Optionally select one game participant as **MVP** when saving results in any format. The completed game report highlights their saved name, portrait, and titles. MVP adds no points. Use **Correct result** to change or clear it with a correction reason. Saving an MVP requires the [game MVP migration](supabase/migrations/202611120001_game_mvp.sql), applied after the earlier migrations.
+
+MVP earners have a military-style gold star insignia below their name on both the podium and the player list, with one star per MVP award in the selected LAN. Players without MVP awards have no insignia. Hover over the stars to see the count. Correcting or clearing a game's MVP updates the stars automatically.
 
 Open a completed game's report and use **Correct result** to fix an earlier award. The correction replaces that game's previous points. The **Admin** menu contains **Adjust points** for bonuses or penalties and **Score history** for reviewing changes and reversing adjustments.
 

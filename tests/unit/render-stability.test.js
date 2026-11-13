@@ -45,6 +45,33 @@ test('render cache recovers after another view clears the container', () => {
   assert.equal(root.writes, 3);
 });
 
+test('MVP stars update on correction and session changes without changing points or ranking', () => {
+  const root = container();
+  const games = [{ status: 'completed', mvp_player_id: 'a' }];
+  const render = (rows = games) => renderLeaderboard(root, players, api, rows);
+  render();
+  const first = root.firstChild;
+  render(structuredClone(games));
+  assert.equal(root.writes, 1);
+  assert.equal(root.firstChild, first);
+  assert.match(root.html, /<h3>Alice<\/h3><span class="player-mvp-stars"/);
+  games[0].mvp_player_id = 'b';
+  render();
+  assert.equal(root.writes, 2);
+  assert.doesNotMatch(root.html, /<h3>Alice<\/h3><span class="player-mvp-stars"/);
+  assert.match(root.html, /<h3>Bob<\/h3><span class="player-mvp-stars"/);
+  games[0].mvp_player_id = null;
+  render();
+  assert.equal(root.writes, 3);
+  assert.doesNotMatch(root.html, /player-mvp-stars/);
+  render([{ status: 'completed', mvp_player_id: 'a' }, { status: 'completed', mvp_player_id: 'a' }]);
+  assert.match(root.html, /aria-label="2 MVP awards"/);
+  render([]);
+  assert.doesNotMatch(root.html, /player-mvp-stars/);
+  assert.match(root.html, /Alice, rank 1, 10 points/);
+  assert.match(root.html, /Bob, rank 2, 5 points/);
+});
+
 test('a failed portrait remains a fallback on unchanged refreshes', () => {
   const root = container();
   let onError, removed = false;

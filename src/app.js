@@ -176,7 +176,7 @@ export function mountApp(root, { config, supabase }) {
     setHtml($('#session-select'), board.sessions.map((session) => `<option value="${session.id}" ${session.id === board.session.id ? 'selected' : ''}>${h(session.name)}${session.active ? ' (active)' : ''}</option>`).join(''));
     $('[data-action=start-new-game]').hidden = !board.is_admin || !board.session.active;
     $('[data-action=start-new-game]').disabled = !mutable() || Boolean(activeGame(board.games));
-    renderLeaderboard($('#leaderboard'), board.players, api);
+    renderLeaderboard($('#leaderboard'), board.players, api, board.games);
     renderGames($('#game-list'), board.games, api, board.is_admin);
     $('#games-sidebar').hidden = !$('#game-list').childElementCount;
     $('.dashboard').classList.toggle('no-games', $('#games-sidebar').hidden);
