@@ -28,7 +28,7 @@ On wider screens, **Assignments below / Assignments beside** switches the team-r
 
 Game results and leaderboard points are entered separately. For timed games, enter results in seconds. Scores and points support up to two decimal places.
 
-For team games, award the same points to each player, split a total pool, or assign custom points per player. Free-for-all games have a separate result and points award for each participant.
+For team games, award the same points to each player, split a total pool, or assign custom points per player. Free-for-all games only require points for each participant; those points are also saved as the game result.
 
 Optionally select one game participant as **MVP** when saving results in any format. The completed game report highlights their saved name, portrait, and titles. MVP adds no points. Use **Correct result** to change or clear it with a correction reason. Saving an MVP requires the [game MVP migration](supabase/migrations/202611120001_game_mvp.sql), applied after the earlier migrations.
 

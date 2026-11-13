@@ -75,7 +75,8 @@ export function createAdminForms({ dialog, api, client, config, getBoard, refres
       const read = (form) => entries.map((team) => {
         const get = (key) => form.elements[`${team.id}-${key}`]?.value;
         const custom = Object.fromEntries(team.members.map((member) => [member.player_id, get(member.player_id)]));
-        try { toCents(get('result')); } catch (error) { throw new Error(`${team.name}: ${error.message}`); }
+        const result = freeForAll ? get('amount') : get('result');
+        try { toCents(result); } catch (error) { throw new Error(`${team.name}: ${error.message}`); }
         const mode = freeForAll ? 'equal' : get('mode');
         if (mode === 'custom') {
           for (const member of team.members) {
@@ -84,7 +85,7 @@ export function createAdminForms({ dialog, api, client, config, getBoard, refres
         } else {
           try { toCents(get('amount')); } catch (error) { throw new Error(`${team.name}: ${error.message}`); }
         }
-        return { id: team.id, result: get('result'), mode, amount: get('amount'), custom, player_ids: team.members.map((member) => member.player_id) };
+        return { id: team.id, result, mode, amount: get('amount'), custom, player_ids: team.members.map((member) => member.player_id) };
       });
       const modes = (form) => {
         form.querySelectorAll('[data-team]').forEach((group) => {
@@ -95,7 +96,7 @@ export function createAdminForms({ dialog, api, client, config, getBoard, refres
           group.querySelectorAll('[data-custom] input').forEach((input) => { input.disabled = mode !== 'custom'; input.required = mode === 'custom'; });
         });
       };
-      const form = presenter.open({ title: `${game.score_revision ? 'Correct' : 'Record'} result: ${game.name}`, submit: 'Save results', content: `${entries.map((team) => `<fieldset class="result-team" data-team="${team.id}"><legend>${freeForAll ? imageMarkup(api.imageUrl(player(team.members[0].player_id).image_path), team.name, 'small-portrait') : ''}${h(team.name)}</legend>${freeForAll ? '' : `<ul class="result-entry-roster">${team.members.map((member) => { const p = player(member.player_id); return `<li>${imageMarkup(api.imageUrl(p.image_path), p.name, 'small-portrait')}<strong>${h(p.name)}</strong></li>`; }).join('')}</ul>`}<div class="form-grid">${field(game.direction === 'lower' ? 'Result (lower wins)' : 'Result (higher wins)', `${team.id}-result`, team.result ?? '', 'inputmode="decimal" required')}
+      const form = presenter.open({ title: `${game.score_revision ? 'Correct' : 'Record'} result: ${game.name}`, submit: 'Save results', content: `${entries.map((team) => `<fieldset class="result-team" data-team="${team.id}"><legend>${freeForAll ? imageMarkup(api.imageUrl(player(team.members[0].player_id).image_path), team.name, 'small-portrait') : ''}${h(team.name)}</legend>${freeForAll ? '' : `<ul class="result-entry-roster">${team.members.map((member) => { const p = player(member.player_id); return `<li>${imageMarkup(api.imageUrl(p.image_path), p.name, 'small-portrait')}<strong>${h(p.name)}</strong></li>`; }).join('')}</ul>`}<div class="form-grid">${freeForAll ? '' : field(game.direction === 'lower' ? 'Result (lower wins)' : 'Result (higher wins)', `${team.id}-result`, team.result ?? '', 'inputmode="decimal" required')}
         ${freeForAll ? '' : `<label>Award rule<select name="${team.id}-mode"><option value="equal" ${team.award?.mode === 'equal' ? 'selected' : ''}>Points per player</option><option value="split" ${team.award?.mode === 'split' ? 'selected' : ''}>Split total pool</option><option value="custom" ${team.award?.mode === 'custom' ? 'selected' : ''}>Custom per player</option></select></label>`}
         <div data-amount>${field(freeForAll ? 'Player points' : 'Award / pool', `${team.id}-amount`, team.award?.amount ?? '0', 'inputmode="decimal"')}</div></div><div data-custom class="form-grid">${freeForAll ? '' : team.members.map((member) => field(player(member.player_id).name, `${team.id}-${member.player_id}`, team.award?.custom?.[member.player_id] ?? '0', 'inputmode="decimal"')).join('')}</div></fieldset>`).join('')}${mvpSelectionMarkup(game)}${field(game.score_revision ? 'Reason for correction' : 'Note (optional)', 'reason', '', `${game.score_revision ? 'required' : ''} maxlength="500"`)}`,
         onInput: modes,

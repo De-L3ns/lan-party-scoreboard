@@ -13,7 +13,8 @@ function fixture(format='teams', revision=0, mvp=undefined) {
     elements.mvp_player_id = { value: mvp ?? '' };
   }
   const groups=game.teams.map(team=>{
-    elements[`${team.id}-result`]={value:'3.25'};elements[`${team.id}-amount`]={value:'10'};elements[`${team.id}-mode`]={value:'equal'};
+    if(format!=='ffa')elements[`${team.id}-result`]={value:'3.25'};
+    elements[`${team.id}-amount`]={value:'10'};elements[`${team.id}-mode`]={value:'equal'};
     for(const {player_id} of team.members)if(format==='teams')elements[`${team.id}-${player_id}`]={value:'0'};
     const amount={},custom={};
     return {amount,custom,querySelector:selector=>selector==='select'?(format==='teams'?elements[`${team.id}-mode`]:null):selector==='[data-amount]'?amount:custom,
@@ -26,15 +27,44 @@ function fixture(format='teams', revision=0, mvp=undefined) {
   return {board,game,page,form,groups,calls,transitions,fail:value=>{fail=value;}};
 }
 
-test('free-for-all submits once directly with saved identities and separate results/points', async () => {
+test('free-for-all submits once with saved identities and uses player points as the result', async () => {
   const f=fixture('ffa');
   assert.equal(f.page.submit,'Save results');assert.doesNotMatch(f.page.content,/result-preview|Preview awards/);
   assert.match(f.page.content,/portrait-fallback/);assert.doesNotMatch(f.page.content,/Award rule/);
   f.board.revision=99;f.board.players[0].points=1000;f.game.score_revision=9;
   await f.page.onSubmit(f.form);
   assert.equal(f.calls.length,1);assert.equal(f.calls[0][1].board_revision,8);assert.equal(f.calls[0][1].revision,0);
-  assert.ok(f.calls[0][1].teams.every(t=>t.mode==='equal'&&t.result==='3.25'&&t.amount==='10'));
+  assert.ok(f.calls[0][1].teams.every(t=>t.mode==='equal'&&t.result==='10'&&t.amount==='10'));
   assert.equal(f.transitions[0].rows.find(p=>p.id==='a').afterPoints,20);
+});
+
+test('free-for-all only shows points inputs and corrections keep results in sync', async () => {
+  for (const revision of [0, 1]) {
+    const f = fixture('ffa', revision);
+    assert.doesNotMatch(f.page.content, /name="t[abc]-result"|Result \(lower wins\)/);
+    assert.ok(f.game.teams.every(team => f.form.elements[`${team.id}-amount`].required));
+    f.form.elements['ta-amount'].value = '0';
+    f.form.elements['tb-amount'].value = '-1.25';
+    f.form.elements['tc-amount'].value = '7.50';
+    await f.page.onSubmit(f.form);
+    assert.deepEqual(f.calls[0][1].teams.map(team => [team.result, team.amount]), [['0', '0'], ['-1.25', '-1.25'], ['7.50', '7.50']]);
+    assert.equal(f.transitions[0].rows.find(player => player.id === 'a').pointChange, revision ? -5 : 0);
+    assert.equal(f.transitions[0].rows.find(player => player.id === 'c').pointChange, 7.5);
+  }
+});
+
+test('FFA points and team scores remain required and validated', async () => {
+  for (const value of ['', 'bad', '1.001']) {
+    const f = fixture('ffa');
+    f.form.elements['tb-amount'].value = value;
+    await assert.rejects(f.page.onSubmit(f.form), /Player b: Enter a number/);
+    assert.equal(f.calls.length, 0);
+  }
+  const team = fixture('teams');
+  assert.match(team.page.content, /name="team-result"[^>]*\brequired\b/);
+  team.form.elements['team-result'].value = '';
+  await assert.rejects(team.page.onSubmit(team.form), /The team: Enter a number/);
+  assert.equal(team.calls.length, 0);
 });
 
 test('individual and team results save an optional MVP, prefill corrections, and allow clearing', async () => {
